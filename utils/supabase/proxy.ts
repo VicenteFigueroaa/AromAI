@@ -37,7 +37,7 @@ export async function updateSession(request: NextRequest) {
 
   // Protect the routes
   // Redirect to /login if user is not authenticated and trying to access protected routes
-  const protectedRoutes = ['/mi-estante', '/recomendacion']
+  const protectedRoutes = ['/mi-estante', '/recomendacion', '/perfil']
   const isProtectedRoute = protectedRoutes.some((route) => request.nextUrl.pathname.startsWith(route))
 
   if (!user && isProtectedRoute) {

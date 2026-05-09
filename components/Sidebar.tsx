@@ -33,6 +33,15 @@ const navItems = [
       </svg>
     ),
   },
+  {
+    name: 'Perfil',
+    href: '/perfil',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+      </svg>
+    ),
+  },
 ];
 
 export default function Sidebar() {
@@ -77,8 +86,8 @@ export default function Sidebar() {
                 key={item.href}
                 href={item.href}
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${isActive
-                    ? 'bg-blue-600/10 text-blue-400 font-semibold border border-blue-500/20 shadow-lg shadow-blue-500/5'
-                    : 'text-slate-400 hover:text-slate-100 hover:bg-slate-900 border border-transparent'
+                  ? 'bg-blue-600/10 text-blue-400 font-semibold border border-blue-500/20 shadow-lg shadow-blue-500/5'
+                  : 'text-slate-400 hover:text-slate-100 hover:bg-slate-900 border border-transparent'
                   }`}
               >
                 <span className={`transition-colors ${isActive ? 'text-blue-400' : 'group-hover:text-blue-300'}`}>

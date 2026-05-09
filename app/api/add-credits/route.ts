@@ -19,24 +19,14 @@ export async function POST() {
     // Obtener créditos y datos de anuncios actuales
     const { data: profile } = await supabaseAdmin
       .from('profiles')
-      .select('search_credits, ads_watched_today, last_ad_date')
+      .select('search_credits, ads_watched_today')
       .eq('id', user.id)
       .single();
 
-    const today = new Date().toISOString().split('T')[0]; // "YYYY-MM-DD"
-    const lastAdDate = profile?.last_ad_date;
-    
-    let adsWatched = profile?.ads_watched_today || 0;
+    const adsWatched = profile?.ads_watched_today || 0;
+    const currentCredits = profile?.search_credits || 0;
 
-    let currentCredits = profile?.search_credits || 0;
-
-    // Reinicio diario
-    if (lastAdDate !== today) {
-      adsWatched = 0;
-      currentCredits = 3; // Si es nuevo día, ya tienes 3 créditos gratis
-    }
-
-    // Verificar límite
+    // Verificar límite diario de anuncios
     if (adsWatched >= 2) {
       return NextResponse.json({ 
         error: 'DAILY_LIMIT_REACHED',
@@ -52,7 +42,7 @@ export async function POST() {
       .update({ 
         search_credits: newCredits,
         ads_watched_today: adsWatched + 1,
-        last_ad_date: today
+        last_ad_date: new Date().toISOString().split('T')[0]
       })
       .eq('id', user.id);
 

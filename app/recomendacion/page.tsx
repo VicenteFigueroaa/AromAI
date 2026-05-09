@@ -117,10 +117,6 @@ export default function RecomendacionPage() {
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-emerald-500/10 blur-[120px] rounded-full pointer-events-none"></div>
 
       <div className="w-full max-w-2xl text-center mt-10 mb-12 relative z-10">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700 text-sm text-emerald-400 font-medium mb-6 shadow-lg">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg>
-          Motor de IA con WeatherAPI
-        </div>
         <h1 className="text-4xl md:text-5xl font-black text-white mb-4 tracking-tight">
           ¿Qué fragancia me <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-blue-400">pongo hoy?</span>
         </h1>
@@ -268,10 +264,10 @@ export default function RecomendacionPage() {
                       onClick={() => handleFeedback(true)}
                       disabled={feedbackGiven !== null}
                       className={`p-2 rounded-lg transition-all ${feedbackGiven === 'positive'
-                          ? 'bg-emerald-500 text-emerald-950 scale-110'
-                          : feedbackGiven === 'negative'
-                            ? 'opacity-30 grayscale'
-                            : 'bg-slate-800 text-slate-300 hover:bg-emerald-500/20 hover:text-emerald-400'
+                        ? 'bg-emerald-500 text-emerald-950 scale-110'
+                        : feedbackGiven === 'negative'
+                          ? 'opacity-30 grayscale'
+                          : 'bg-slate-800 text-slate-300 hover:bg-emerald-500/20 hover:text-emerald-400'
                         }`}
                     >
                       👍
@@ -280,10 +276,10 @@ export default function RecomendacionPage() {
                       onClick={() => handleFeedback(false)}
                       disabled={feedbackGiven !== null}
                       className={`p-2 rounded-lg transition-all ${feedbackGiven === 'negative'
-                          ? 'bg-red-500 text-red-950 scale-110'
-                          : feedbackGiven === 'positive'
-                            ? 'opacity-30 grayscale'
-                            : 'bg-slate-800 text-slate-300 hover:bg-red-500/20 hover:text-red-400'
+                        ? 'bg-red-500 text-red-950 scale-110'
+                        : feedbackGiven === 'positive'
+                          ? 'opacity-30 grayscale'
+                          : 'bg-slate-800 text-slate-300 hover:bg-red-500/20 hover:text-red-400'
                         }`}
                     >
                       👎

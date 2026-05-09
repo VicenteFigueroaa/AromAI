@@ -34,20 +34,14 @@ export default function Home() {
       if (user) {
         const { data: profile } = await supabase
           .from('profiles')
-          .select('search_credits, last_ad_date, ads_watched_today')
+          .select('search_credits, ads_watched_today')
           .eq('id', user.id)
           .single();
-          
+
         if (profile) {
-          const today = new Date().toISOString().split('T')[0];
-          // --- RESET DIARIO OPTIMISTA (UI) ---
-          if (profile.last_ad_date !== today) {
-            setCredits(3);
-          } else {
-            setCredits(profile.search_credits);
-            if (profile.ads_watched_today >= 2) {
-              setErrorCode('DAILY_LIMIT_REACHED');
-            }
+          setCredits(profile.search_credits);
+          if (profile.ads_watched_today >= 2) {
+            setErrorCode('DAILY_LIMIT_REACHED');
           }
         }
       }
@@ -203,7 +197,7 @@ export default function Home() {
             <input
               id="perfume"
               type="text"
-              placeholder={selectedImage ? "Imagen adjunta (opcional añadir texto)" : "Ej: Starwalker Extreme o Il Capo"}
+              placeholder={selectedImage ? "Imagen adjunta (opcional añadir texto)" : "Ej: Sauvage Dior o Eros Versace"}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-transparent px-4 py-3 text-slate-100 placeholder-slate-500 focus:outline-none"

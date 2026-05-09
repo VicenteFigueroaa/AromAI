@@ -36,19 +36,11 @@ export async function POST(request: Request) {
     // Verificar créditos
     const { data: profile } = await supabaseAdmin
       .from('profiles')
-      .select('search_credits, last_ad_date, ads_watched_today')
+      .select('search_credits')
       .eq('id', user.id)
       .single();
 
-    const today = new Date().toISOString().split('T')[0];
-    let currentCredits = profile?.search_credits || 0;
-
-    // --- RESET DIARIO AUTOMÁTICO ---
-    if (profile && profile.last_ad_date !== today) {
-      currentCredits = 3; // Restaurar 3 créditos base si es un nuevo día
-    }
-
-    if (currentCredits <= 0) {
+    if (!profile || profile.search_credits <= 0) {
       return NextResponse.json({ 
         error: 'NO_CREDITS', 
         message: 'Te has quedado sin créditos. Recarga viendo un anuncio.' 
