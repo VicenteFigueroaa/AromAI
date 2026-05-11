@@ -41,18 +41,28 @@ export default function RecomendacionPage() {
     setFeedbackGiven(null);
 
     try {
-      // 1. Obtener ubicación (Solo Latitud y Longitud)
+      // 1. Intentar obtener ubicación GPS (no bloquea si falla)
       setStatusText('Consultando al satélite tu ubicación...');
-      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        if (!navigator.geolocation) reject(new Error('Geolocalización no soportada'));
-        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 });
-      }).catch(err => {
-        setLocationPermitted(false);
-        throw new Error('No pudimos acceder a tu ubicación. Permite el acceso GPS e intenta de nuevo.');
-      });
+      let latitude: number | undefined;
+      let longitude: number | undefined;
 
-      const { latitude, longitude } = position.coords;
-      setLocationPermitted(true);
+      try {
+        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+          if (!navigator.geolocation) reject(new Error('no_support'));
+          navigator.geolocation.getCurrentPosition(resolve, reject, { 
+            timeout: 6000,
+            enableHighAccuracy: false,
+            maximumAge: 300000 // Reusar ubicación de los últimos 5 minutos
+          });
+        });
+        latitude = position.coords.latitude;
+        longitude = position.coords.longitude;
+        setLocationPermitted(true);
+      } catch (geoErr) {
+        // GPS falló, no pasa nada — el servidor usará tu IP
+        console.warn('📍 GPS no disponible, usando IP como fallback');
+        setLocationPermitted(false);
+      }
 
       // 2. Consultar a nuestra API (Ella se encarga de WeatherAPI y Gemini)
       setStatusText('Analizando clima, humedad e inventario...');
