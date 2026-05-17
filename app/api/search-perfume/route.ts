@@ -33,14 +33,16 @@ export async function POST(request: Request) {
       }, { status: 401 });
     }
 
-    // Verificar créditos
+    // Verificar créditos y estado premium
     const { data: profile } = await supabaseAdmin
       .from('profiles')
-      .select('search_credits')
+      .select('search_credits, is_pro')
       .eq('id', user.id)
       .single();
 
-    if (!profile || profile.search_credits <= 0) {
+    const isPro = profile?.is_pro || false;
+
+    if (!isPro && (!profile || profile.search_credits <= 0)) {
       return NextResponse.json({ 
         error: 'NO_CREDITS', 
         message: 'Te has quedado sin créditos. Recarga viendo un anuncio.' 
@@ -97,12 +99,14 @@ export async function POST(request: Request) {
 
       if (cachedPerfume) {
         // ¡Bingo! Estaba en la base de datos.
-        // Cobramos el crédito por usar la plataforma
-        await supabaseAdmin.rpc('decrement_search_credits', { user_id: user.id });
-        await supabaseAdmin
-          .from('profiles')
-          .update({ search_credits: (profile?.search_credits || 1) - 1 })
-          .eq('id', user.id);
+        // Cobramos el crédito por usar la plataforma (solo si no es premium)
+        if (!isPro) {
+          await supabaseAdmin.rpc('decrement_search_credits', { user_id: user.id });
+          await supabaseAdmin
+            .from('profiles')
+            .update({ search_credits: (profile?.search_credits || 1) - 1 })
+            .eq('id', user.id);
+        }
 
         return NextResponse.json({
           source: 'cache',
@@ -242,12 +246,14 @@ export async function POST(request: Request) {
       .single();
 
     if (canonicalPerfume) {
-      // Cobramos el crédito incluso si es un cache hit tardío
-      await supabaseAdmin.rpc('decrement_search_credits', { user_id: user.id });
-      await supabaseAdmin
-        .from('profiles')
-        .update({ search_credits: (profile?.search_credits || 1) - 1 })
-        .eq('id', user.id);
+      // Cobramos el crédito incluso si es un cache hit tardío (solo si no es premium)
+      if (!isPro) {
+        await supabaseAdmin.rpc('decrement_search_credits', { user_id: user.id });
+        await supabaseAdmin
+          .from('profiles')
+          .update({ search_credits: (profile?.search_credits || 1) - 1 })
+          .eq('id', user.id);
+      }
 
       // Si ya existía bajo el nombre oficial, lo devolvemos y listo
       return NextResponse.json({ source: 'canonical_cache', data: canonicalPerfume, variants: canonicalPerfume.variants ?? aiData.variants });
@@ -280,11 +286,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ source: 'ai_live', data: newPerfume, variants: aiData.variants });
     }
 
-    // 5. COBRAR EL CRÉDITO (Puesto que fue un éxito)
-    if (user) {
+    // 5. COBRAR EL CRÉDITO (Puesto que fue un éxito, solo si no es premium)
+    if (user && !isPro) {
       await supabaseAdmin.rpc('decrement_search_credits', { user_id: user.id });
-      // NOTA: Para no complicar con RPC si no está creado, podemos hacer un update directo
-      // ya que el volumen inicial no tendrá condiciones de carrera graves.
       await supabaseAdmin
         .from('profiles')
         .update({ search_credits: (profile?.search_credits || 1) - 1 })

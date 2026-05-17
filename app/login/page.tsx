@@ -7,13 +7,16 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Campos del formulario
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
   const supabase = createClient();
 
+  // --- Login con Google ---
   const handleGoogleLogin = async () => {
     setLoading(true);
     setError(null);
-    
-    // Obtener la URL base actual (útil para que funcione tanto en local como en producción)
     const origin = window.location.origin;
 
     const { error } = await supabase.auth.signInWithOAuth({
@@ -27,7 +30,39 @@ export default function LoginPage() {
       setError(error.message);
       setLoading(false);
     }
-    // Si no hay error, Supabase redirigirá automáticamente a la página de Google.
+  };
+
+  // --- Login con Email ---
+  const handleEmailAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    if (!email || !password) {
+      setError('Por favor, completa todos los campos.');
+      setLoading(false);
+      return;
+    }
+
+    // --- LOGIN ---
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      if (error.message.includes('Invalid login credentials')) {
+        setError('Correo o contraseña incorrectos.');
+      } else if (error.message.includes('Email not confirmed')) {
+        setError('Debes confirmar tu correo antes de iniciar sesión. Revisa tu bandeja de entrada.');
+      } else {
+        setError(error.message);
+      }
+    } else {
+      window.location.href = '/';
+    }
+
+    setLoading(false);
   };
 
   return (
@@ -40,8 +75,60 @@ export default function LoginPage() {
           AromAI
         </h1>
         <p className="text-slate-400 mb-8 text-center">
-          Inicia sesión para guardar tu estante y obtener recomendaciones personalizadas.
+          Inicia sesión para acceder a tu estante.
         </p>
+
+        {/* Formulario Email / Contraseña */}
+        <form onSubmit={handleEmailAuth} className="w-full space-y-4 mb-6">
+          
+          {/* Email */}
+          <div>
+            <label htmlFor="email" className="block text-xs text-slate-400 uppercase tracking-widest font-semibold mb-1.5">
+              Correo electrónico
+            </label>
+            <input
+              id="email"
+              type="email"
+              placeholder="tu@correo.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className="w-full bg-slate-900 border border-slate-600 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+            />
+          </div>
+
+          {/* Contraseña */}
+          <div>
+            <label htmlFor="password" className="block text-xs text-slate-400 uppercase tracking-widest font-semibold mb-1.5">
+              Contraseña
+            </label>
+            <input
+              id="password"
+              type="password"
+              placeholder="Tu contraseña"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              className="w-full bg-slate-900 border border-slate-600 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+            />
+          </div>
+
+          {/* Botón principal */}
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-gradient-to-r from-blue-500 to-emerald-500 hover:from-blue-600 hover:to-emerald-600 text-white font-semibold py-3 px-4 rounded-xl transition-all disabled:opacity-70 disabled:cursor-not-allowed shadow-lg shadow-blue-500/20"
+          >
+            {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
+          </button>
+        </form>
+
+        {/* Separador */}
+        <div className="w-full flex items-center gap-4 mb-6">
+          <div className="flex-1 h-px bg-slate-700"></div>
+          <span className="text-xs text-slate-500 uppercase tracking-widest font-semibold">o</span>
+          <div className="flex-1 h-px bg-slate-700"></div>
+        </div>
 
         {/* Botón de Google */}
         <button
@@ -53,7 +140,6 @@ export default function LoginPage() {
             <span className="animate-pulse">Conectando con Google...</span>
           ) : (
             <>
-              {/* Icono de Google SVG (simplificado) */}
               <svg className="w-5 h-5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
                 <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
@@ -65,7 +151,7 @@ export default function LoginPage() {
           )}
         </button>
 
-        {/* Mensaje de Error */}
+        {/* Mensajes de error */}
         {error && (
           <div className="mt-4 p-3 bg-red-900/50 border border-red-500/50 rounded-lg text-red-200 text-sm text-center w-full">
             {error}

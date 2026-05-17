@@ -12,6 +12,7 @@ export default function Home() {
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
   const [credits, setCredits] = useState<number | null>(null);
+  const [isPro, setIsPro] = useState(false);
   const [addingCredits, setAddingCredits] = useState(false);
   const [addingToShelf, setAddingToShelf] = useState(false);
   const [shelfMessage, setShelfMessage] = useState<{ text: string; type: 'success' | 'error' | 'pro' } | null>(null);
@@ -34,11 +35,12 @@ export default function Home() {
       if (user) {
         const { data: profile } = await supabase
           .from('profiles')
-          .select('search_credits, ads_watched_today')
+          .select('search_credits, ads_watched_today, is_pro')
           .eq('id', user.id)
           .single();
 
         if (profile) {
+          setIsPro(profile.is_pro || false);
           setCredits(profile.search_credits);
           if (profile.ads_watched_today >= 2) {
             setErrorCode('DAILY_LIMIT_REACHED');
@@ -100,6 +102,7 @@ export default function Home() {
     setResult(null);
     setVariants([]);
     setActiveConcentration('');
+    setShelfMessage(null);
 
     try {
       const body: any = { perfumeName: searchQuery };
@@ -125,8 +128,8 @@ export default function Home() {
       setVariants(data.variants || []);
       setActiveConcentration(data.data.concentration || '');
 
-      // Descontamos 1 crédito visualmente por la búsqueda
-      if (credits !== null) {
+      // Descontamos 1 crédito visualmente por la búsqueda (solo si no es premium)
+      if (!isPro && credits !== null) {
         setCredits(prev => (prev ? prev - 1 : 0));
       }
 
@@ -165,11 +168,11 @@ export default function Home() {
       <div className="w-full max-w-md flex justify-between items-center mt-4 mb-4">
         {user ? (
           <div className="bg-slate-800 border border-slate-700 px-3 py-1.5 rounded-full flex items-center gap-2 shadow-lg">
-            <span className="text-xl">⚡</span>
+            <span className="text-xl">{isPro ? '👑' : '⚡'}</span>
             <span className="text-sm font-bold text-slate-200">
-              {credits !== null ? credits : '...'} <span className="text-slate-500 font-normal"> Créditos</span>
+              {isPro ? '∞' : (credits !== null ? credits : '...')} <span className="text-slate-500 font-normal">{isPro ? 'Premium' : 'Créditos'}</span>
             </span>
-            {credits === 0 && (
+            {!isPro && credits === 0 && (
               <button onClick={handleWatchAd} disabled={addingCredits || errorCode === 'DAILY_LIMIT_REACHED'} className="ml-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-xs px-2 py-0.5 rounded-full transition-colors">
                 {addingCredits ? '...' : errorCode === 'DAILY_LIMIT_REACHED' ? 'Límite' : '+1'}
               </button>
@@ -370,7 +373,7 @@ export default function Home() {
                           setResult(data);
                           setActiveConcentration(v);
 
-                          if (credits !== null) {
+                          if (!isPro && credits !== null) {
                             setCredits(prev => (prev ? prev - 1 : 0));
                           }
                         }

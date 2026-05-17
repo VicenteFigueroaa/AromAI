@@ -49,18 +49,29 @@ export default function RecomendacionPage() {
       try {
         const position = await new Promise<GeolocationPosition>((resolve, reject) => {
           if (!navigator.geolocation) reject(new Error('no_support'));
-          navigator.geolocation.getCurrentPosition(resolve, reject, { 
-            timeout: 6000,
-            enableHighAccuracy: false,
-            maximumAge: 300000 // Reusar ubicación de los últimos 5 minutos
-          });
+
+          // Mostrar progreso mientras espera al GPS
+          const statusTimer = setTimeout(() => {
+            setStatusText('Buscando señal GPS... esto puede tardar unos segundos');
+          }, 3000);
+
+          navigator.geolocation.getCurrentPosition(
+            (pos) => { clearTimeout(statusTimer); resolve(pos); },
+            (err) => { clearTimeout(statusTimer); reject(err); },
+            { 
+              timeout: 10000,
+              enableHighAccuracy: true,
+              maximumAge: 120000 // Reusar ubicación de los últimos 2 minutos
+            }
+          );
         });
         latitude = position.coords.latitude;
         longitude = position.coords.longitude;
         setLocationPermitted(true);
       } catch (geoErr) {
         // GPS falló, no pasa nada — el servidor usará tu IP
-        console.warn('📍 GPS no disponible, usando IP como fallback');
+        console.warn('📍 GPS no disponible, usando ubicación aproximada por IP');
+        setStatusText('Usando ubicación aproximada...');
         setLocationPermitted(false);
       }
 
@@ -73,6 +84,7 @@ export default function RecomendacionPage() {
       });
 
       const aiData = await aiRes.json();
+      console.log('🔍 Respuesta de /api/recommend:', aiData);
 
       if (!aiRes.ok) {
         throw new Error(aiData.error || 'Error en la recomendación');

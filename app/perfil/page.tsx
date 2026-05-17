@@ -12,7 +12,7 @@ export default async function PerfilPage() {
   const data = await getProfileData()
   if (!data.success) redirect('/login')
 
-  const { user: userData, credits, adsWatchedToday, stats, olfactoryDNA } = data as any
+  const { user: userData, credits, adsWatchedToday, isPro, stats, olfactoryDNA } = data as any
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-50 p-6 sm:p-12 font-sans relative overflow-hidden">
@@ -58,49 +58,64 @@ export default async function PerfilPage() {
           </div>
         </section>
 
-        {/* ========== SECCIÓN 2: PANEL FREEMIUM ========== */}
+        {/* ========== SECCIÓN 2: PANEL FREEMIUM / PREMIUM ========== */}
         <section className="bg-slate-900/80 backdrop-blur border border-slate-800 rounded-3xl p-8 mb-8 shadow-2xl">
-          <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-            <span className="text-emerald-400">🪙</span> Créditos
-          </h2>
+          {isPro ? (
+            <>
+              <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                <span>👑</span> Plan Premium
+              </h2>
+              <div className="bg-gradient-to-r from-amber-500/10 to-yellow-500/10 border border-amber-500/20 rounded-2xl p-6 flex flex-col sm:flex-row items-center gap-4">
+                <div className="text-5xl">♾️</div>
+                <div className="text-center sm:text-left">
+                  <p className="text-lg font-bold text-amber-300">Búsquedas Ilimitadas</p>
+                  <p className="text-sm text-slate-400">Disfrutas de acceso completo a AromAI sin límite de créditos ni anuncios.</p>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
+                <span className="text-emerald-400">🪙</span> Créditos
+              </h2>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            {/* Créditos */}
-            <div className="bg-slate-800/60 rounded-2xl p-6 border border-slate-700/50">
-              <p className="text-xs text-slate-400 uppercase tracking-widest mb-2 font-semibold">Búsquedas Disponibles</p>
-              <div className="flex items-end gap-2 mb-4">
-                <span className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-blue-400">
-                  {credits}
-                </span>
-                <span className="text-slate-500 text-sm mb-1">/ 3 diarios</span>
-              </div>
-              {/* Barra de progreso */}
-              <div className="w-full h-2 bg-slate-700 rounded-full overflow-hidden">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-blue-400 transition-all duration-700"
-                  style={{ width: `${Math.min((credits / 3) * 100, 100)}%` }}
-                />
-              </div>
-            </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                {/* Créditos */}
+                <div className="bg-slate-800/60 rounded-2xl p-6 border border-slate-700/50">
+                  <p className="text-xs text-slate-400 uppercase tracking-widest mb-2 font-semibold">Búsquedas Disponibles</p>
+                  <div className="flex items-end gap-2 mb-4">
+                    <span className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-blue-400">
+                      {credits}
+                    </span>
+                    <span className="text-slate-500 text-sm mb-1">/ 3 diarios</span>
+                  </div>
+                  <div className="w-full h-2 bg-slate-700 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-blue-400 transition-all duration-700"
+                      style={{ width: `${Math.min((credits / 3) * 100, 100)}%` }}
+                    />
+                  </div>
+                </div>
 
-            {/* Anuncios */}
-            <div className="bg-slate-800/60 rounded-2xl p-6 border border-slate-700/50">
-              <p className="text-xs text-slate-400 uppercase tracking-widest mb-2 font-semibold">Anuncios Vistos Hoy</p>
-              <div className="flex items-end gap-2 mb-4">
-                <span className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-400">
-                  {adsWatchedToday}
-                </span>
-                <span className="text-slate-500 text-sm mb-1">/ 2 máximo</span>
+                {/* Anuncios */}
+                <div className="bg-slate-800/60 rounded-2xl p-6 border border-slate-700/50">
+                  <p className="text-xs text-slate-400 uppercase tracking-widest mb-2 font-semibold">Anuncios Vistos Hoy</p>
+                  <div className="flex items-end gap-2 mb-4">
+                    <span className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-400">
+                      {adsWatchedToday}
+                    </span>
+                    <span className="text-slate-500 text-sm mb-1">/ 2 máximo</span>
+                  </div>
+                  <div className="w-full h-2 bg-slate-700 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-amber-400 to-orange-400 transition-all duration-700"
+                      style={{ width: `${(adsWatchedToday / 2) * 100}%` }}
+                    />
+                  </div>
+                </div>
               </div>
-              {/* Barra de progreso */}
-              <div className="w-full h-2 bg-slate-700 rounded-full overflow-hidden">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-amber-400 to-orange-400 transition-all duration-700"
-                  style={{ width: `${(adsWatchedToday / 2) * 100}%` }}
-                />
-              </div>
-            </div>
-          </div>
+            </>
+          )}
         </section>
 
         {/* ========== SECCIÓN 3: ESTADÍSTICAS BI ========== */}
