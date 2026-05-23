@@ -27,9 +27,9 @@ export async function POST(request: Request) {
     const { data: { user } } = await ssrSupabase.auth.getUser();
 
     if (!user) {
-      return NextResponse.json({ 
-        error: 'AUTH_REQUIRED', 
-        message: 'Inicia sesión para analizar fragancias.' 
+      return NextResponse.json({
+        error: 'AUTH_REQUIRED',
+        message: 'Inicia sesión para analizar fragancias.'
       }, { status: 401 });
     }
 
@@ -43,9 +43,9 @@ export async function POST(request: Request) {
     const isPro = profile?.is_pro || false;
 
     if (!isPro && (!profile || profile.search_credits <= 0)) {
-      return NextResponse.json({ 
-        error: 'NO_CREDITS', 
-        message: 'Te has quedado sin créditos. Recarga viendo un anuncio.' 
+      return NextResponse.json({
+        error: 'NO_CREDITS',
+        message: 'Te has quedado sin créditos. Recarga viendo un anuncio.'
       }, { status: 403 });
     }
     // ---------------------------------------
@@ -304,11 +304,11 @@ export async function POST(request: Request) {
 
   } catch (error: any) {
     console.error('Error en la API de búsqueda:', error);
-    
+
     // Si es el error 503 de sobrecarga de Gemini, le damos un mensaje claro
     if (error?.status === 503 || error?.message?.includes('503') || error?.message?.includes('high demand')) {
-      return NextResponse.json({ 
-        error: 'Nuestros servidores de IA están temporalmente saturados por alta demanda. Por favor, intenta de nuevo en unos segundos.' 
+      return NextResponse.json({
+        error: 'Nuestros servidores de IA están temporalmente saturados por alta demanda. Por favor, intenta de nuevo en unos segundos.'
       }, { status: 503 });
     }
 

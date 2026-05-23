@@ -12,12 +12,26 @@ export default function RecomendacionPage() {
   const [locationPermitted, setLocationPermitted] = useState(true);
   const [feedbackGiven, setFeedbackGiven] = useState<'positive' | 'negative' | null>(null);
   const [history, setHistory] = useState<any[]>([]);
+  
+  // Chat State
+  const [isPro, setIsPro] = useState(false);
+  const [chatMessage, setChatMessage] = useState('');
+  const [isChatting, setIsChatting] = useState(false);
+  const [chatCount, setChatCount] = useState(0);
+  const [recommendationTime, setRecommendationTime] = useState<number | null>(null);
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     async function loadHistory() {
       const res = await getRecommendationHistory();
       if (res.success && res.history) {
         setHistory(res.history);
+        if (res.isPro !== undefined) setIsPro(res.isPro);
       }
     }
     loadHistory();
@@ -32,6 +46,9 @@ export default function RecomendacionPage() {
       context: item.context
     });
     setFeedbackGiven(item.feedback === true ? 'positive' : item.feedback === false ? 'negative' : null);
+    setRecommendationTime(new Date(item.created_at).getTime());
+    setChatCount(0);
+    setChatMessage('');
   };
 
   const getRecommendation = async () => {
@@ -91,6 +108,9 @@ export default function RecomendacionPage() {
       }
 
       setResult(aiData);
+      setRecommendationTime(Date.now());
+      setChatCount(0);
+      setChatMessage('');
 
       // Si nos devuelve un log_id (sea nuevo o de caché), lo añadimos al historial visual si no estaba
       if (aiData.log_id) {
@@ -129,6 +149,57 @@ export default function RecomendacionPage() {
       });
     } catch (error) {
       console.error('Error enviando feedback:', error);
+    }
+  };
+
+  const isChatLocked = () => {
+    if (!recommendationTime) return true;
+    const minutesPassed = (now - recommendationTime) / 1000 / 60;
+    if (minutesPassed > 5) return true;
+    if (!isPro && chatCount >= 1) return true;
+    return false;
+  };
+
+  const getChatPlaceholder = () => {
+    if (!recommendationTime) return '';
+    const minutesPassed = (now - recommendationTime) / 1000 / 60;
+    if (minutesPassed > 5) return 'Chat cerrado por inactividad. Pide una nueva recomendación.';
+    if (!isPro && chatCount >= 1) return 'Límite gratis alcanzado. Hazte Premium para seguir.';
+    return 'Afinar recomendación (Ej. Voy a salir de noche)';
+  };
+
+  const handleChat = async () => {
+    if (!chatMessage.trim() || isChatLocked() || isChatting || !result) return;
+    setIsChatting(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/recommend/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          log_id: result.log_id,
+          message: chatMessage,
+          weatherContext: result.context,
+          previousWinnerId: result.winner.id,
+          previousJustification: result.justification
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al chatear');
+
+      setResult({
+        ...result,
+        winner: data.winner,
+        justification: data.justification,
+        source: 'live'
+      });
+      setChatMessage('');
+      setChatCount(prev => prev + 1);
+      setRecommendationTime(Date.now()); // Da otros 5 minutos
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsChatting(false);
     }
   };
 
@@ -277,7 +348,7 @@ export default function RecomendacionPage() {
 
               {/* Botones de Feedback */}
               {result.log_id && (
-                <div className="flex items-center justify-between bg-slate-900/50 p-4 rounded-xl border border-slate-800">
+                <div className="flex items-center justify-between bg-slate-900/50 p-4 rounded-xl border border-slate-800 mb-6">
                   <span className="text-sm text-slate-400 font-medium">
                     {feedbackGiven ? '¡Gracias por tu opinión!' : '¿Te parece una buena recomendación?'}
                   </span>
@@ -309,11 +380,44 @@ export default function RecomendacionPage() {
                   </div>
                 </div>
               )}
+
+              {/* Input Chat Sommelier */}
+              <div className="flex gap-2 w-full animate-in fade-in duration-500">
+                <input
+                  type="text"
+                  value={chatMessage}
+                  onChange={(e) => setChatMessage(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleChat(); }}
+                  disabled={isChatLocked() || isChatting}
+                  maxLength={!isPro ? 150 : undefined}
+                  placeholder={getChatPlaceholder()}
+                  className="flex-1 bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                />
+                <button
+                  onClick={handleChat}
+                  disabled={isChatLocked() || isChatting || !chatMessage.trim()}
+                  className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 text-white px-4 py-3 rounded-xl font-bold transition-colors flex items-center justify-center min-w-[50px]"
+                >
+                  {isChatting ? (
+                    <svg className="w-5 h-5 animate-spin text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                      <circle cx="12" cy="12" r="10" strokeWidth="3" strokeOpacity="0.2"></circle>
+                      <path d="M12 2a10 10 0 0 1 10 10" strokeWidth="3" strokeLinecap="round"></path>
+                    </svg>
+                  ) : (
+                    '➤'
+                  )}
+                </button>
+              </div>
+              {!isPro && !isChatLocked() && chatMessage.length > 0 && (
+                <p className="text-[10px] text-right mt-1 text-slate-500">
+                  {chatMessage.length} / 150
+                </p>
+              )}
             </div>
 
             <button
               onClick={() => setResult(null)}
-              className="mt-8 w-full bg-slate-700 hover:bg-slate-600 text-white font-semibold py-3 rounded-xl transition-colors text-sm"
+              className="mt-6 w-full bg-slate-700 hover:bg-slate-600 text-white font-semibold py-3 rounded-xl transition-colors text-sm"
             >
               Nueva consulta
             </button>

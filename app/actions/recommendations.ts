@@ -10,6 +10,15 @@ export async function getRecommendationHistory() {
     return { success: false, error: 'NOT_AUTHENTICATED' }
   }
 
+  // Obtener estado premium
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('is_pro')
+    .eq('id', user.id)
+    .single()
+  
+  const isPro = profile?.is_pro || false;
+
   const { data: history, error } = await supabase
     .from('recommendation_logs')
     .select(`
@@ -49,5 +58,5 @@ export async function getRecommendationHistory() {
     feedback: log.user_feedback
   }))
 
-  return { success: true, history: formattedHistory }
+  return { success: true, history: formattedHistory, isPro }
 }

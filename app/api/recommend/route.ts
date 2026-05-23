@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     }
 
     const weatherRes = await fetch(
-      `https://api.weatherapi.com/v1/current.json?key=${weatherKey}&q=${latitude},${longitude}&lang=es`
+      `https://api.weatherapi.com/v1/forecast.json?key=${weatherKey}&q=${latitude},${longitude}&days=1&lang=es`
     );
     
     if (!weatherRes.ok) {
@@ -39,6 +39,12 @@ export async function POST(request: Request) {
     const weatherData = await weatherRes.json();
     const current = weatherData.current;
 
+    const hourlyForecast = weatherData.forecast?.forecastday?.[0]?.hour?.map((h: any) => ({
+      time: h.time.split(' ')[1],
+      temp: h.temp_c,
+      condition: h.condition.text
+    })) || [];
+
     // Extraer datos interesantes para la IA
     const weatherContext = {
       temp: current.temp_c,
@@ -46,7 +52,8 @@ export async function POST(request: Request) {
       humidity: current.humidity,
       uv: current.uv,
       condition: current.condition.text,
-      isDay: current.is_day === 1 ? 'Día' : 'Noche'
+      isDay: current.is_day === 1 ? 'Día' : 'Noche',
+      forecast: hourlyForecast
     };
 
     // 4. Verificar si existe una recomendación reciente (Caché de 2 horas)
@@ -124,12 +131,15 @@ export async function POST(request: Request) {
     const prompt = `
       Eres un sommelier de fragancias maestro. Tu trabajo es elegir el MEJOR perfume para el usuario en este momento exacto.
       
-      CONTEXTO CLIMÁTICO DETALLADO:
+      CONTEXTO CLIMÁTICO DETALLADO (AHORA):
       - Temperatura: ${weatherContext.temp}°C (Sensación de ${weatherContext.feelsLike}°C)
       - Condición: ${weatherContext.condition}
       - Humedad: ${weatherContext.humidity}% (Crítico: la humedad alta potencia las notas dulces y puede hacerlas pesadas).
       - Índice UV: ${weatherContext.uv} (Crítico: UV alto sugiere fragancias frescas y energizantes).
       - Momento: ${weatherContext.isDay}
+
+      PRONÓSTICO PARA EL RESTO DEL DÍA (Por Horas):
+      ${JSON.stringify(weatherContext.forecast, null, 2)}
       
       ESTANTE DEL USUARIO:
       ${JSON.stringify(catalog, null, 2)}
