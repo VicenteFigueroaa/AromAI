@@ -78,14 +78,41 @@ export default function Home() {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64String = reader.result as string;
-      setSelectedImage(base64String.split(',')[1]); // Guardar solo la data base64
-      setImageMimeType(file.type);
-      // Auto limpiar el input text si hay imagen, opcional
-      setSearchQuery("");
-    };
     reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 800;
+        const MAX_HEIGHT = 800;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width *= MAX_HEIGHT / height;
+            height = MAX_HEIGHT;
+          }
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        
+        // Comprimir a JPEG con 70% de calidad para evitar errores de Payload Too Large en Vercel
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+        setSelectedImage(dataUrl.split(',')[1]);
+        setImageMimeType('image/jpeg');
+        setSearchQuery("");
+      };
+    };
   };
 
   const removeImage = () => {
@@ -117,11 +144,23 @@ export default function Home() {
         body: JSON.stringify(body),
       });
 
-      const data = await res.json();
+      const contentType = res.headers.get("content-type");
+      let data;
+      
+      if (contentType && contentType.includes("application/json")) {
+        data = await res.json();
+      } else {
+        const textError = await res.text();
+        if (res.status === 413) {
+          throw new Error("La imagen sigue siendo demasiado grande (Error 413).");
+        }
+        console.error("Non-JSON Error:", textError);
+        throw new Error("Error en el servidor al procesar la solicitud.");
+      }
 
       if (!res.ok) {
-        setErrorCode(data.error || 'ERROR');
-        throw new Error(data.message || data.error || "Hubo un error al buscar el perfume");
+        setErrorCode(data?.error || 'ERROR');
+        throw new Error(data?.message || data?.error || "Hubo un error al buscar el perfume");
       }
 
       setResult(data);
