@@ -77,6 +77,7 @@ export async function POST(request: Request) {
       CONTEXTO CLIMÁTICO DETALLADO:
       - Temperatura Actual: ${weatherContext?.temp}°C
       - Condición Actual: ${weatherContext?.condition}
+      - Precipitación Actual: ${weatherContext?.precip_mm || 0} mm
       - Humedad: ${weatherContext?.humidity}%
       - Índice UV: ${weatherContext?.uv}
       - Momento: ${weatherContext?.isDay}

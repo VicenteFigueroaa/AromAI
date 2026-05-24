@@ -42,8 +42,17 @@ export async function POST(request: Request) {
     const hourlyForecast = weatherData.forecast?.forecastday?.[0]?.hour?.map((h: any) => ({
       time: h.time.split(' ')[1],
       temp: h.temp_c,
-      condition: h.condition.text
+      condition: h.condition.text,
+      chance_of_rain: h.chance_of_rain
     })) || [];
+
+    const precip = current.precip_mm || 0;
+    let finalCondition = current.condition.text;
+
+    // Filtro de Realidad: Si la API dice que llueve pero no hay precipitación real, forzamos que sea "Nublado"
+    if (finalCondition.toLowerCase().includes('lluvia') && precip === 0) {
+      finalCondition = 'Nublado';
+    }
 
     // Extraer datos interesantes para la IA
     const weatherContext = {
@@ -51,7 +60,8 @@ export async function POST(request: Request) {
       feelsLike: current.feelslike_c,
       humidity: current.humidity,
       uv: current.uv,
-      condition: current.condition.text,
+      condition: finalCondition,
+      precip_mm: precip,
       isDay: current.is_day === 1 ? 'Día' : 'Noche',
       forecast: hourlyForecast
     };
@@ -133,7 +143,8 @@ export async function POST(request: Request) {
       
       CONTEXTO CLIMÁTICO DETALLADO (AHORA):
       - Temperatura: ${weatherContext.temp}°C (Sensación de ${weatherContext.feelsLike}°C)
-      - Condición: ${weatherContext.condition}
+      - Condición: ${weatherContext.condition} 
+      - Precipitación Actual: ${weatherContext.precip_mm} mm
       - Humedad: ${weatherContext.humidity}% (Crítico: la humedad alta potencia las notas dulces y puede hacerlas pesadas).
       - Índice UV: ${weatherContext.uv} (Crítico: UV alto sugiere fragancias frescas y energizantes).
       - Momento: ${weatherContext.isDay}
