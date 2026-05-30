@@ -3,6 +3,7 @@ import { supabase } from '@/utils/supabase'; // Asegúrate de que la ruta coinci
 import { createClient } from '@supabase/supabase-js'; // Añade esta línea
 import { createClient as createSSRClient } from '@/utils/supabase/server';
 import { GoogleGenAI } from '@google/genai';
+import sharp from 'sharp';
 
 // Inicializamos el SDK de Google con la variable de entorno secreta
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
@@ -11,6 +12,39 @@ const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+
+async function fetchPerfumeImageUrl(brand: string, name: string, concentration: string): Promise<string | null> {
+  try {
+    const query = `${brand} ${name} ${concentration} perfume bottle`;
+
+    const serperResponse = await fetch('https://google.serper.dev/images', {
+      method: 'POST',
+      headers: {
+        'X-API-KEY': process.env.SERPER_API_KEY!,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ q: query, num: 10 })
+    });
+
+    const serperData = await serperResponse.json();
+    const images = serperData.images ?? [];
+
+    for (const img of images) {
+      const url: string = img.imageUrl ?? '';
+      if (url.match(/\.(jpg|jpeg|png|webp)(\?|$)/i) ||
+        url.includes('fragrantica.com') ||
+        url.includes('wikimedia.org') ||
+        url.includes('cloudinary.com')) {
+        return url;
+      }
+    }
+
+    return null;
+  } catch (e) {
+    console.warn('⚠️ Serper image search falló:', e);
+    return null;
+  }
+}
 
 export async function POST(request: Request) {
   try {
@@ -190,7 +224,7 @@ export async function POST(request: Request) {
 
     // Limpiamos la respuesta en caso de que la IA agregue comillas de código Markdown (```json ... ```)
     const cleanJsonText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-    
+
     let parsedData;
     try {
       parsedData = JSON.parse(cleanJsonText);
@@ -275,6 +309,63 @@ export async function POST(request: Request) {
       return NextResponse.json({ source: 'canonical_cache', data: canonicalPerfume, variants: canonicalPerfume.variants ?? aiData.variants });
     }
 
+    const imageUrlFromSerper = await fetchPerfumeImageUrl(aiData.brand, aiData.name, aiData.concentration);
+    let finalImageUrl: string | null = imageUrlFromSerper;
+
+    if (imageUrlFromSerper) {  // 👈 Antes era: if (aiData.image_url)
+      try {
+        const imgResponse = await fetch(imageUrlFromSerper, {  // 👈 Usa imageUrlFromSerper
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Referer': new URL(imageUrlFromSerper).origin,
+            'Accept': 'image/webp,image/jpeg,image/png,image/*'
+          }
+        });
+
+        const contentType = imgResponse.headers.get('content-type') || '';
+
+        // ✅ Validar que sea realmente una imagen antes de pasarla a Sharp
+        if (imgResponse.ok && contentType.startsWith('image/')) {
+          const buffer = Buffer.from(await imgResponse.arrayBuffer());
+
+          const compressedBuffer = await sharp(buffer)
+            .resize(400, 400, {
+              fit: 'inside',
+              withoutEnlargement: true
+            })
+            .webp({ quality: 80 })
+            .toBuffer();
+
+          const fileName = `${canonicalKey}.webp`;
+
+          const { data: uploaded } = await supabaseAdmin.storage
+            .from('perfume-images')
+            .upload(fileName, compressedBuffer, {
+              contentType: 'image/webp',
+              upsert: true
+            });
+
+          if (uploaded) {
+            const { data: publicUrl } = supabaseAdmin.storage
+              .from('perfume-images')
+              .getPublicUrl(fileName);
+
+            finalImageUrl = publicUrl.publicUrl;
+          } else {
+            finalImageUrl = null; // Upload falló
+          }
+        } else {
+          // El sitio bloqueó el acceso o no es una imagen
+          console.warn(`⚠️ URL bloqueada o no es imagen. Content-Type: ${contentType}`);
+          finalImageUrl = null;
+        }
+      } catch (e) {
+        console.warn('⚠️ No se pudo guardar imagen:', e);
+        finalImageUrl = null;
+      }
+    }
+
+
     // 4. GUARDAR EN LA BASE DE DATOS (Para futuras búsquedas)
     const newPerfume = {
       search_key: canonicalKey, // USAMOS LA CANÓNICA con concentración
@@ -287,7 +378,7 @@ export async function POST(request: Request) {
       heart_notes: aiData.heart_notes,
       base_notes: aiData.base_notes,
       ai_metadata: aiData.ai_metadata,
-      image_url: null
+      image_url: finalImageUrl
     };
 
     const { data: insertedPerfume, error: insertError } = await supabaseAdmin

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import PerfumeCard from '@/components/PerfumeCard';
 import { getRecommendationHistory } from '@/app/actions/recommendations';
 
@@ -12,7 +12,7 @@ export default function RecomendacionPage() {
   const [locationPermitted, setLocationPermitted] = useState(true);
   const [feedbackGiven, setFeedbackGiven] = useState<'positive' | 'negative' | null>(null);
   const [history, setHistory] = useState<any[]>([]);
-  
+
   // Chat State
   const [isPro, setIsPro] = useState(false);
   const [chatMessage, setChatMessage] = useState('');
@@ -21,6 +21,38 @@ export default function RecomendacionPage() {
   const [chatCount, setChatCount] = useState(0);
   const [recommendationTime, setRecommendationTime] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
+
+  // Drag-to-scroll refs
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const isDragging = useRef(false);
+  const startX = useRef(0);
+  const scrollLeft = useRef(0);
+  const hasDragged = useRef(false);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (!scrollContainerRef.current) return;
+    isDragging.current = true;
+    hasDragged.current = false;
+    startX.current = e.pageX - scrollContainerRef.current.offsetLeft;
+    scrollLeft.current = scrollContainerRef.current.scrollLeft;
+  };
+
+  const handleMouseLeave = () => {
+    isDragging.current = false;
+  };
+
+  const handleMouseUp = () => {
+    isDragging.current = false;
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging.current || !scrollContainerRef.current) return;
+    e.preventDefault();
+    hasDragged.current = true;
+    const x = e.pageX - scrollContainerRef.current.offsetLeft;
+    const walk = (x - startX.current) * 1.5; // Velocidad del scroll
+    scrollContainerRef.current.scrollLeft = scrollLeft.current - walk;
+  };
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 10000);
@@ -76,7 +108,7 @@ export default function RecomendacionPage() {
           navigator.geolocation.getCurrentPosition(
             (pos) => { clearTimeout(statusTimer); resolve(pos); },
             (err) => { clearTimeout(statusTimer); reject(err); },
-            { 
+            {
               timeout: 10000,
               enableHighAccuracy: true,
               maximumAge: 120000 // Reusar ubicación de los últimos 2 minutos
@@ -275,11 +307,18 @@ export default function RecomendacionPage() {
       {!result && history.length > 0 && !loading && (
         <div className="w-full max-w-4xl mt-16 animate-in fade-in slide-in-from-bottom-8 duration-700 z-10 relative">
           <div className="flex items-center gap-3 mb-6">
-            <h3 className="text-lg font-semibold text-slate-300">Historial Reciente</h3>
+            <h3 className="text-lg font-semibold text-slate-300">Historial Reciente (7 días)</h3>
             <div className="h-[1px] flex-1 bg-gradient-to-r from-slate-700 to-transparent"></div>
           </div>
 
-          <div className="flex gap-4 overflow-x-auto pb-6 snap-x hide-scrollbar">
+          <div 
+            ref={scrollContainerRef}
+            onMouseDown={handleMouseDown}
+            onMouseLeave={handleMouseLeave}
+            onMouseUp={handleMouseUp}
+            onMouseMove={handleMouseMove}
+            className="flex gap-4 overflow-x-auto pb-6 snap-x hide-scrollbar select-none"
+          >
             {history.map((item, index) => {
               const date = new Date(item.created_at);
               const timeString = date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -287,7 +326,10 @@ export default function RecomendacionPage() {
               return (
                 <div
                   key={item.log_id || index}
-                  onClick={() => loadFromHistory(item)}
+                  onClick={() => {
+                    if (hasDragged.current) return;
+                    loadFromHistory(item);
+                  }}
                   className="min-w-[280px] sm:min-w-[320px] bg-slate-800/60 hover:bg-slate-800 border border-slate-700 hover:border-emerald-500/50 rounded-2xl p-4 cursor-pointer transition-all snap-start flex items-center gap-4 group"
                 >
                   <div className="w-16 h-16 rounded-xl bg-slate-900 overflow-hidden flex-shrink-0 border border-slate-700 relative">
