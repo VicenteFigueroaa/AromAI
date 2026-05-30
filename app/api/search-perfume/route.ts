@@ -134,7 +134,11 @@ export async function POST(request: Request) {
       4. EXHAUSTIVIDAD EN VARIANTES (CRÍTICO): Tu objetivo es el 100% de "Recall". Cuando busques variantes o "Flankers" de esta línea, NO te detengas en las 3 o 4 más populares. Realiza una búsqueda profunda en tu base de conocimientos para encontrar versiones de años anteriores, ediciones limitadas (ej: Summer, Absolute, Aqua) o descatalogadas. Prefiero que tomes más tiempo procesando a que omitas un solo Flanker válido.
       
       5. Diferenciación de Género: Si la línea tiene versiones para hombres y mujeres (como "The Icon"), DEBES especificar el género en el nombre de la variante para evitar confusiones (ej: "EDP (Men)", "EDP (Women)"). NO clasifiques versiones femeninas como masculinas ni viceversa. Verifica esto consultando la descripción oficial o el diseño de la botella en tus resultados de búsqueda.
-      6. Formato: Devuelve ÚNICAMENTE un objeto JSON válido. NO uses bloques de código ni markdown (como \`\`\`json), solo abre y cierra con las llaves {}.
+      6. Formato JSON ESTRICTO: Devuelve ÚNICAMENTE un objeto JSON válido. NO uses bloques de código ni markdown (como \`\`\`json). CRÍTICO: Asegúrate de escapar correctamente las comillas dobles internas usando barra invertida (\\") para no romper el formato JSON.
+      7. Alternativas: Dentro de ai_metadata, debes proponer 3 alternativas a este perfume:
+         - economy: Un clon, inspiración o perfume mucho más barato con un aroma casi idéntico.
+         - peer: Un perfume de precio similar de otra marca que comparta la misma vibra.
+         - upgrade: Una versión nicho o más lujosa/potente que eleve esta misma experiencia olfativa.
 
       ESTRUCTURA JSON REQUERIDA (Si el perfume existe):
       {
@@ -151,7 +155,12 @@ export async function POST(request: Request) {
           "clima_ideal": ["calor", "frio", "templado"], 
           "formalidad": ["casual", "semiformal", "formal"], 
           "momento_del_dia": ["manana", "tarde", "noche"], 
-          "proyeccion": "suave" | "moderada" | "fuerte"
+          "proyeccion": "suave" | "moderada" | "fuerte",
+          "alternatives": {
+            "economy": { "brand": "Marca (ej. Armaf)", "name": "Nombre (ej. Club de Nuit)", "reason": "Motivo corto de 1 línea" },
+            "peer": { "brand": "Marca", "name": "Nombre", "reason": "Motivo corto de 1 línea" },
+            "upgrade": { "brand": "Marca", "name": "Nombre", "reason": "Motivo corto de 1 línea" }
+          }
         }
       }
       NOTA PARA ai_metadata: En clima, formalidad y momento, devuelve un arreglo (array) solo con las opciones donde el perfume realmente brille. Puede ser más de una.
@@ -181,7 +190,14 @@ export async function POST(request: Request) {
 
     // Limpiamos la respuesta en caso de que la IA agregue comillas de código Markdown (```json ... ```)
     const cleanJsonText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-    const parsedData = JSON.parse(cleanJsonText);
+    
+    let parsedData;
+    try {
+      parsedData = JSON.parse(cleanJsonText);
+    } catch (parseError: any) {
+      console.error("❌ Error parseando JSON de Gemini. Raw Text:", cleanJsonText);
+      throw new Error(`Error de formato al analizar el perfume. La IA devolvió texto inválido. Intenta de nuevo.`);
+    }
 
     // Normalizar las llaves por si Gemini las devuelve en mayúsculas (ej. "Name" en vez de "name")
     const aiData = {

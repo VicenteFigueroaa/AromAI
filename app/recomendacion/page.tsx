@@ -16,6 +16,7 @@ export default function RecomendacionPage() {
   // Chat State
   const [isPro, setIsPro] = useState(false);
   const [chatMessage, setChatMessage] = useState('');
+  const [preContextMessage, setPreContextMessage] = useState('');
   const [isChatting, setIsChatting] = useState(false);
   const [chatCount, setChatCount] = useState(0);
   const [recommendationTime, setRecommendationTime] = useState<number | null>(null);
@@ -97,7 +98,7 @@ export default function RecomendacionPage() {
       const aiRes = await fetch('/api/recommend', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ latitude, longitude })
+        body: JSON.stringify({ latitude, longitude, preContextMessage })
       });
 
       const aiData = await aiRes.json();
@@ -219,34 +220,55 @@ export default function RecomendacionPage() {
       </div>
 
       {!result && (
-        <button
-          onClick={getRecommendation}
-          disabled={loading}
-          className="relative z-10 group overflow-hidden bg-slate-800 hover:bg-slate-700 disabled:opacity-80 border border-slate-700 hover:border-emerald-500/50 shadow-2xl rounded-3xl p-1 transition-all duration-300 transform hover:scale-[1.02] active:scale-95"
-        >
-          <div className="absolute inset-0 bg-gradient-to-r from-emerald-500 to-blue-500 opacity-0 group-hover:opacity-20 transition-opacity"></div>
-          <div className="bg-slate-900 rounded-[22px] px-8 py-6 flex items-center gap-4 relative z-10">
-            {loading ? (
-              <svg className="w-8 h-8 animate-spin text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <circle cx="12" cy="12" r="10" strokeWidth="3" strokeOpacity="0.2"></circle>
-                <path d="M12 2a10 10 0 0 1 10 10" strokeWidth="3" strokeLinecap="round"></path>
-              </svg>
-            ) : (
-              <div className="w-12 h-12 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-emerald-400">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-              </div>
+        <div className="flex flex-col items-center gap-4 relative z-10 w-full max-w-md">
+          {/* Pre-Context Input */}
+          <div className="w-full relative">
+            <input
+              type="text"
+              value={preContextMessage}
+              onChange={(e) => setPreContextMessage(e.target.value)}
+              maxLength={!isPro ? 150 : undefined}
+              placeholder="Petición especial (Opc. ej: Voy al gimnasio)"
+              className="w-full bg-slate-800/80 border border-slate-700 text-slate-200 text-sm rounded-2xl px-5 py-4 focus:outline-none focus:border-emerald-500 transition-colors shadow-lg placeholder:text-slate-500 disabled:opacity-50"
+              disabled={loading}
+            />
+            {!isPro && preContextMessage.length > 0 && (
+              <p className="text-[10px] text-slate-500 w-full text-right mt-1 absolute -bottom-4 right-2">
+                {preContextMessage.length} / 150
+              </p>
             )}
-
-            <div className="text-left">
-              <p className="text-white font-bold text-lg">
-                {loading ? 'Consultando al Sommelier...' : 'Generar Selección Perfecta'}
-              </p>
-              <p className="text-slate-400 text-sm">
-                {loading ? statusText : 'Analizando clima actual'}
-              </p>
-            </div>
           </div>
-        </button>
+
+          {/* Main Button */}
+          <button
+            onClick={getRecommendation}
+            disabled={loading}
+            className="w-full relative group overflow-hidden bg-slate-800 hover:bg-slate-700 disabled:opacity-80 border border-slate-700 hover:border-emerald-500/50 shadow-2xl rounded-3xl p-1 transition-all duration-300 transform hover:scale-[1.02] active:scale-95"
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-emerald-500 to-blue-500 opacity-0 group-hover:opacity-20 transition-opacity"></div>
+            <div className="bg-slate-900 rounded-[22px] px-8 py-6 flex items-center gap-4 relative z-10 w-full">
+              {loading ? (
+                <svg className="w-8 h-8 animate-spin text-emerald-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <circle cx="12" cy="12" r="10" strokeWidth="3" strokeOpacity="0.2"></circle>
+                  <path d="M12 2a10 10 0 0 1 10 10" strokeWidth="3" strokeLinecap="round"></path>
+                </svg>
+              ) : (
+                <div className="w-12 h-12 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-emerald-400 flex-shrink-0">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                </div>
+              )}
+
+              <div className="text-left">
+                <p className="text-white font-bold text-lg leading-tight">
+                  {loading ? 'Consultando...' : 'Generar Selección'}
+                </p>
+                <p className="text-slate-400 text-xs mt-1">
+                  {loading ? statusText : 'Analizando clima actual'}
+                </p>
+              </div>
+            </div>
+          </button>
+        </div>
       )}
 
       {/* Sección de Historial */}
@@ -305,7 +327,7 @@ export default function RecomendacionPage() {
         <div className="w-full max-w-5xl grid md:grid-cols-2 gap-8 items-start mt-8 animate-in slide-in-from-bottom-8 duration-700 relative z-10">
 
           {/* Tarjeta de Contexto Enriquecida */}
-          <div className="bg-slate-800/80 backdrop-blur border border-slate-700 rounded-3xl p-8 shadow-2xl flex flex-col h-full relative">
+          <div className="bg-slate-800/80 backdrop-blur border border-slate-700 rounded-3xl p-8 shadow-2xl flex flex-col h-full relative order-2 md:order-1">
 
             {/* Indicador de Origen (Cache vs Live AI) */}
             <div className="absolute top-6 right-6">
@@ -424,7 +446,7 @@ export default function RecomendacionPage() {
           </div>
 
           {/* Tarjeta del Perfume */}
-          <div className="w-full max-w-sm mx-auto pointer-events-none">
+          <div className="w-full max-w-sm mx-auto pointer-events-none order-1 md:order-2">
             <div className="relative">
               <div className="absolute -inset-4 bg-emerald-500/20 blur-xl rounded-full animate-pulse"></div>
               <PerfumeCard perfume={result.winner} />

@@ -8,7 +8,7 @@ export default function PerfumeCard({ perfume, inventoryId, customImageUrl }: { 
   const [isOpen, setIsOpen] = useState(false)
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  
+
   const handleUploadClick = (e: React.MouseEvent) => {
     e.stopPropagation()
     fileInputRef.current?.click()
@@ -19,14 +19,59 @@ export default function PerfumeCard({ perfume, inventoryId, customImageUrl }: { 
     if (!file || !inventoryId) return
 
     setUploading(true)
-    const formData = new FormData()
-    formData.append('image', file)
-    
-    const result = await updatePerfumeImage(inventoryId, formData)
-    if (!result.success) {
-      alert('Error al subir la imagen')
+
+    try {
+      // Compresión de imagen usando Canvas en el cliente
+      const img = new Image();
+      const reader = new FileReader();
+
+      const compressedBlob = await new Promise<Blob>((resolve, reject) => {
+        reader.onload = (event) => {
+          img.src = event.target?.result as string;
+        };
+        reader.onerror = error => reject(error);
+
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          const MAX_SIZE = 800; // Reducimos a 800px para ahorrar muchísimo espacio
+
+          if (width > height && width > MAX_SIZE) {
+            height *= MAX_SIZE / width;
+            width = MAX_SIZE;
+          } else if (height > MAX_SIZE) {
+            width *= MAX_SIZE / height;
+            height = MAX_SIZE;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+
+          canvas.toBlob((blob) => {
+            if (blob) resolve(blob);
+            else reject(new Error('Canvas to Blob failed'));
+          }, 'image/jpeg', 0.7); // 70% de calidad JPEG es un balance perfecto
+        };
+
+        reader.readAsDataURL(file);
+      });
+
+      const formData = new FormData()
+      formData.append('image', compressedBlob, 'perfume.jpg')
+
+      const result = await updatePerfumeImage(inventoryId, formData)
+      if (!result.success) {
+        alert('Error al subir la imagen')
+      }
+    } catch (error) {
+      console.error('Error comprimiendo/subiendo imagen:', error)
+      alert('Ocurrió un error al procesar la imagen.')
+    } finally {
+      setUploading(false)
     }
-    setUploading(false)
   }
 
   const displayImage = customImageUrl || perfume.image_url
@@ -34,7 +79,7 @@ export default function PerfumeCard({ perfume, inventoryId, customImageUrl }: { 
   return (
     <>
       {/* Card Body */}
-      <div 
+      <div
         onClick={() => setIsOpen(true)}
         className="group relative bg-slate-800 rounded-2xl overflow-hidden border border-slate-700 hover:border-emerald-500/50 transition-all hover:shadow-lg hover:shadow-emerald-900/20 flex flex-col cursor-pointer"
       >
@@ -42,7 +87,7 @@ export default function PerfumeCard({ perfume, inventoryId, customImageUrl }: { 
         {inventoryId && (
           <div className="absolute top-3 right-3 z-20 flex gap-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity duration-300" onClick={(e) => e.stopPropagation()}>
             {/* Botón de Cámara */}
-            <button 
+            <button
               onClick={handleUploadClick}
               disabled={uploading}
               className="p-2 bg-slate-800/80 hover:bg-emerald-600 rounded-full text-white backdrop-blur-sm border border-slate-700 transition-colors shadow-lg"
@@ -54,14 +99,14 @@ export default function PerfumeCard({ perfume, inventoryId, customImageUrl }: { 
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
               )}
             </button>
-            <input 
-              type="file" 
-              ref={fileInputRef} 
-              className="hidden" 
-              accept="image/*" 
-              onChange={handleFileChange} 
+            <input
+              type="file"
+              ref={fileInputRef}
+              className="hidden"
+              accept="image/*"
+              onChange={handleFileChange}
             />
-            
+
             <RemoveButton inventoryId={inventoryId} />
           </div>
         )}
@@ -69,10 +114,10 @@ export default function PerfumeCard({ perfume, inventoryId, customImageUrl }: { 
         {/* Imagen del Perfume */}
         {displayImage && (
           <div className="w-full h-48 bg-slate-900 relative overflow-hidden">
-            <img 
-              src={displayImage} 
-              alt={perfume.name} 
-              className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-opacity duration-500 group-hover:scale-105" 
+            <img
+              src={displayImage}
+              alt={perfume.name}
+              className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-opacity duration-500 group-hover:scale-105"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-slate-800 via-slate-800/20 to-transparent"></div>
           </div>
@@ -102,17 +147,17 @@ export default function PerfumeCard({ perfume, inventoryId, customImageUrl }: { 
 
       {/* Modal Detail View */}
       {isOpen && (
-        <div 
+        <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200"
           onClick={() => setIsOpen(false)}
         >
-          <div 
+          <div
             className="bg-slate-800 w-full max-w-lg rounded-3xl shadow-2xl border border-slate-700 overflow-hidden animate-in zoom-in-95 duration-200"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
             <div className="relative p-8 pb-0">
-              <button 
+              <button
                 onClick={() => setIsOpen(false)}
                 className="absolute top-6 right-6 text-slate-400 hover:text-white transition-colors"
               >
@@ -185,16 +230,6 @@ export default function PerfumeCard({ perfume, inventoryId, customImageUrl }: { 
                   </div>
                 </div>
               )}
-            </div>
-            
-            {/* Modal Footer */}
-            <div className="p-4 bg-slate-900/50 text-center">
-              <button 
-                onClick={() => setIsOpen(false)}
-                className="text-slate-500 hover:text-slate-300 text-xs font-medium uppercase tracking-widest transition-colors"
-              >
-                Cerrar Detalle
-              </button>
             </div>
           </div>
         </div>

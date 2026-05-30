@@ -21,10 +21,43 @@ export default function Home() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [imageMimeType, setImageMimeType] = useState<string | null>(null);
 
+  // Mensajes con duración independiente
+  const loadingMessages = [
+    { text: "Consultando a la IA...", duration: 5500 },
+    { text: "Analizando notas olfativas...", duration: 6000 },
+    { text: "Buscando en la base de datos...", duration: 3000 },
+    { text: "Evaluando alternativas similares...", duration: 4000 },
+    { text: "Afinando los últimos detalles...", duration: 9500 },
+  ];
+
+  const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
+  const [isChangingVariant, setIsChangingVariant] = useState(false);
+
+  useEffect(() => {
+    let timeout: NodeJS.Timeout;
+
+    if (loading || isChangingVariant) {
+      setLoadingMessageIndex(0);
+
+      const changeMessage = (index: number) => {
+        timeout = setTimeout(() => {
+          const nextIndex = (index + 1) % loadingMessages.length;
+
+          setLoadingMessageIndex(nextIndex);
+
+          changeMessage(nextIndex); // programa el siguiente cambio
+        }, loadingMessages[index].duration);
+      };
+
+      changeMessage(0);
+    }
+
+    return () => clearTimeout(timeout);
+  }, [loading, isChangingVariant]);
+
   // Estados para variantes (EDT/EDP/Parfum)
   const [variants, setVariants] = useState<string[]>([]);
   const [activeConcentration, setActiveConcentration] = useState<string>('');
-  const [isChangingVariant, setIsChangingVariant] = useState(false);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -100,12 +133,12 @@ export default function Home() {
             height = MAX_HEIGHT;
           }
         }
-        
+
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         ctx?.drawImage(img, 0, 0, width, height);
-        
+
         // Comprimir a JPEG con 70% de calidad para evitar errores de Payload Too Large en Vercel
         const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
         setSelectedImage(dataUrl.split(',')[1]);
@@ -120,9 +153,15 @@ export default function Home() {
     setImageMimeType(null);
   };
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!searchQuery.trim() && !selectedImage) return;
+  const executeSearch = async (queryOverride?: string) => {
+    const finalQuery = queryOverride !== undefined ? queryOverride : searchQuery;
+    if (!finalQuery.trim() && !selectedImage) return;
+
+    if (queryOverride !== undefined) {
+      setSearchQuery(queryOverride);
+      setSelectedImage(null);
+      setImageMimeType(null);
+    }
 
     setLoading(true);
     setError("");
@@ -132,8 +171,8 @@ export default function Home() {
     setShelfMessage(null);
 
     try {
-      const body: any = { perfumeName: searchQuery };
-      if (selectedImage && imageMimeType) {
+      const body: any = { perfumeName: finalQuery };
+      if (!queryOverride && selectedImage && imageMimeType) {
         body.imageBase64 = selectedImage;
         body.imageMimeType = imageMimeType;
       }
@@ -146,7 +185,7 @@ export default function Home() {
 
       const contentType = res.headers.get("content-type");
       let data;
-      
+
       if (contentType && contentType.includes("application/json")) {
         data = await res.json();
       } else {
@@ -198,6 +237,11 @@ export default function Home() {
     } finally {
       setAddingCredits(false);
     }
+  };
+
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    executeSearch();
   };
 
   return (
@@ -274,7 +318,7 @@ export default function Home() {
             className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 text-white font-semibold py-3 rounded-xl transition-colors flex justify-center items-center gap-2"
           >
             {loading ? (
-              <span className="animate-pulse">Consultando a la IA...</span>
+              <span className="animate-pulse">{loadingMessages[loadingMessageIndex].text}</span>
             ) : (
               "Analizar Fragancia"
             )}
@@ -327,7 +371,7 @@ export default function Home() {
           {isChangingVariant && (
             <div className="absolute inset-0 z-20 bg-slate-900/60 backdrop-blur-[2px] flex flex-col items-center justify-center gap-3">
               <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-              <p className="text-blue-300 font-medium text-sm animate-pulse">Investigando Perfume ...</p>
+              <p className="text-blue-300 font-medium text-sm animate-pulse text-center px-4">{loadingMessages[loadingMessageIndex].text}</p>
             </div>
           )}
 
@@ -455,6 +499,14 @@ export default function Home() {
                   ))}
                 </div>
               </div>
+              <div>
+                <span className="text-xs text-slate-400 uppercase tracking-wider block mb-1">Notas de Fondo</span>
+                <div className="flex flex-wrap gap-2">
+                  {result.data.base_notes?.map((nota: string, i: number) => (
+                    <span key={i} className="bg-slate-700 px-3 py-1 rounded-full text-xs text-slate-200">{nota}</span>
+                  ))}
+                </div>
+              </div>
             </div>
 
             {/* Metadatos (Clima, Momento, etc.) */}
@@ -514,6 +566,44 @@ export default function Home() {
                 </div>
               )}
             </div>
+
+            {/* Alternativas sugeridas */}
+            {result.data.ai_metadata?.alternatives && (
+              <div className="mt-6 pt-6 border-t border-slate-700">
+                <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider mb-4 flex items-center gap-2">
+                  <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+                  Alternativas Sugeridas
+                </h3>
+                <div className="flex flex-col gap-3">
+                  {[
+                    { type: 'economy', label: '💸 Opción Económica / Clon', data: result.data.ai_metadata.alternatives.economy },
+                    { type: 'peer', label: '🤝 Opción Similar', data: result.data.ai_metadata.alternatives.peer },
+                    { type: 'upgrade', label: '💎 Opción Premium / Nicho', data: result.data.ai_metadata.alternatives.upgrade }
+                  ].map((alt) => alt.data && (
+                    <div key={alt.type} className="bg-slate-900/50 p-4 rounded-xl border border-slate-700 hover:border-emerald-500/50 transition-colors group">
+                      <div className="flex justify-between items-start gap-2 mb-2">
+                        <div>
+                          <p className={`text-[10px] font-bold uppercase tracking-wider mb-1 ${alt.type === 'economy' ? 'text-green-400' :
+                            alt.type === 'peer' ? 'text-blue-400' : 'text-purple-400'
+                            }`}>{alt.label}</p>
+                          <h4 className="text-sm font-bold text-white leading-tight">{alt.data.brand} - {alt.data.name}</h4>
+                        </div>
+                        <button
+                          onClick={() => {
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                            executeSearch(`${alt.data.brand} ${alt.data.name}`);
+                          }}
+                          className="bg-slate-800 hover:bg-emerald-600 border border-slate-600 hover:border-emerald-500 text-white text-xs px-3 py-1.5 rounded-lg font-medium transition-colors flex-shrink-0 opacity-80 group-hover:opacity-100"
+                        >
+                          Analizar
+                        </button>
+                      </div>
+                      <p className="text-xs text-slate-400 leading-relaxed">{alt.data.reason}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -14,9 +14,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Debes iniciar sesión' }, { status: 401 });
     }
 
-    // 2. Obtener coordenadas desde el cliente
-    const body = await request.json();
-    const { latitude, longitude } = body;
+    // 2. Obtener datos desde el cliente
+    const { latitude, longitude, preContextMessage } = await request.json();
 
     if (!latitude || !longitude) {
       return NextResponse.json({ error: 'Coordenadas no proporcionadas' }, { status: 400 });
@@ -49,8 +48,8 @@ export async function POST(request: Request) {
     const precip = current.precip_mm || 0;
     let finalCondition = current.condition.text;
 
-    // Filtro de Realidad: Si la API dice que llueve pero no hay precipitación real, forzamos que sea "Nublado"
-    if (finalCondition.toLowerCase().includes('lluvia') && precip === 0) {
+    // Filtro de Realidad: Si la API dice que llueve pero la precipitación es casi nula (menor a 0.1mm), forzamos que sea "Nublado"
+    if (finalCondition.toLowerCase().includes('lluvia') && precip < 0.1) {
       finalCondition = 'Nublado';
     }
 
@@ -67,40 +66,43 @@ export async function POST(request: Request) {
     };
 
     // 4. Verificar si existe una recomendación reciente (Caché de 2 horas)
-    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-    const { data: cachedLogs } = await supabase
-      .from('recommendation_logs')
-      .select(`
-        id,
-        reasoning,
-        weather_context,
-        perfumes:global_perfume_cache (
+    // Solo usamos caché si el usuario NO ha enviado un contexto especial pre-recomendación
+    if (!preContextMessage) {
+      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      const { data: cachedLogs } = await supabase
+        .from('recommendation_logs')
+        .select(`
           id,
-          name,
-          brand,
-          description,
-          top_notes,
-          heart_notes,
-          base_notes,
-          ai_metadata
-        )
-      `)
-      .eq('user_id', user.id)
-      .gte('created_at', twoHoursAgo)
-      .order('created_at', { ascending: false })
-      .limit(1);
+          reasoning,
+          weather_context,
+          perfumes:global_perfume_cache (
+            id,
+            name,
+            brand,
+            description,
+            top_notes,
+            heart_notes,
+            base_notes,
+            ai_metadata
+          )
+        `)
+        .eq('user_id', user.id)
+        .gte('created_at', twoHoursAgo)
+        .order('created_at', { ascending: false })
+        .limit(1);
 
-    if (cachedLogs && cachedLogs.length > 0) {
-      const cached = cachedLogs[0];
-      const p = Array.isArray(cached.perfumes) ? cached.perfumes[0] : cached.perfumes;
-      if (p) {
-        return NextResponse.json({
-          winner: p,
-          justification: cached.reasoning,
-          context: cached.weather_context,
-          source: 'cache',
-          log_id: cached.id
-        });
+      if (cachedLogs && cachedLogs.length > 0) {
+        const cached = cachedLogs[0];
+        const p = Array.isArray(cached.perfumes) ? cached.perfumes[0] : cached.perfumes;
+        if (p) {
+          return NextResponse.json({
+            winner: p,
+            justification: cached.reasoning,
+            context: cached.weather_context,
+            source: 'cache',
+            log_id: cached.id
+          });
+        }
       }
     }
 
@@ -141,6 +143,8 @@ export async function POST(request: Request) {
     const prompt = `
       Eres un sommelier de fragancias maestro. Tu trabajo es elegir el MEJOR perfume para el usuario en este momento exacto.
       
+      ${preContextMessage ? `PETICIÓN ESPECIAL DEL USUARIO PARA HOY:\n"${preContextMessage}"\n(Debes priorizar esta petición por encima de cualquier otra regla de clima si aplica).` : ''}
+
       CONTEXTO CLIMÁTICO DETALLADO (AHORA):
       - Temperatura: ${weatherContext.temp}°C (Sensación de ${weatherContext.feelsLike}°C)
       - Condición: ${weatherContext.condition} 
