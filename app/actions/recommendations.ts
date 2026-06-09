@@ -19,10 +19,16 @@ export async function getRecommendationHistory() {
   
   const isPro = profile?.is_pro || false;
 
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const dateLimit = new Date();
+  if (isPro) {
+    // Premium: Últimos 3 meses (90 días)
+    dateLimit.setDate(dateLimit.getDate() - 90);
+  } else {
+    // Freemium: Últimos 7 días
+    dateLimit.setDate(dateLimit.getDate() - 7);
+  }
 
-  const { data: history, error } = await supabase
+  let query = supabase
     .from('recommendation_logs')
     .select(`
       id,
@@ -43,9 +49,13 @@ export async function getRecommendationHistory() {
       )
     `)
     .eq('user_id', user.id)
-    .gte('created_at', sevenDaysAgo.toISOString())
+    .gte('created_at', dateLimit.toISOString())
     .order('created_at', { ascending: false })
-    .limit(20)
+
+  // Freemium limit 20, Pro limit 150
+  query = query.limit(isPro ? 150 : 20);
+
+  const { data: history, error } = await query;
 
   if (error) {
     console.error('Error fetching recommendation history:', error)

@@ -131,3 +131,26 @@ export async function updatePerfumeImage(inventoryId: string | number, formData:
   revalidatePath('/mi-estante')
   return { success: true, url: publicUrl }
 }
+
+export async function togglePerfumeStatus(inventoryId: string | number, isActive: boolean) {
+  const supabase = await createClient()
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    return { success: false, error: 'NOT_AUTHENTICATED' }
+  }
+
+  const { error } = await supabase
+    .from('inventory')
+    .update({ is_active: isActive })
+    .eq('id', inventoryId)
+    .eq('user_id', user.id) // Seguridad: solo puede modificar si es suyo
+
+  if (error) {
+    console.error('Error updating perfume status:', error)
+    return { success: false, error: 'DATABASE_ERROR' }
+  }
+
+  revalidatePath('/mi-estante')
+  return { success: true }
+}

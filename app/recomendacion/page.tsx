@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import PerfumeCard from '@/components/PerfumeCard';
+import InstagramCalendar from '@/components/InstagramCalendar';
 import { getRecommendationHistory } from '@/app/actions/recommendations';
 
 export default function RecomendacionPage() {
@@ -12,6 +13,7 @@ export default function RecomendacionPage() {
   const [locationPermitted, setLocationPermitted] = useState(true);
   const [feedbackGiven, setFeedbackGiven] = useState<'positive' | 'negative' | null>(null);
   const [history, setHistory] = useState<any[]>([]);
+  const [historyView, setHistoryView] = useState<'carousel' | 'calendar'>('carousel');
 
   // Chat State
   const [isPro, setIsPro] = useState(false);
@@ -306,52 +308,79 @@ export default function RecomendacionPage() {
       {/* Sección de Historial */}
       {!result && history.length > 0 && !loading && (
         <div className="w-full max-w-4xl mt-16 animate-in fade-in slide-in-from-bottom-8 duration-700 z-10 relative">
-          <div className="flex items-center gap-3 mb-6">
-            <h3 className="text-lg font-semibold text-slate-300">Historial Reciente (7 días)</h3>
-            <div className="h-[1px] flex-1 bg-gradient-to-r from-slate-700 to-transparent"></div>
+          
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-semibold text-slate-300">Tus Recomendaciones</h3>
+            <div className="flex bg-slate-800/80 rounded-xl p-1 border border-slate-700">
+              <button 
+                onClick={() => setHistoryView('carousel')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${historyView === 'carousel' ? 'bg-slate-700 text-emerald-400 shadow' : 'text-slate-400 hover:text-slate-200'}`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <span className="hidden sm:inline">Recientes</span>
+              </button>
+              <button 
+                onClick={() => {
+                  if (!isPro) {
+                    alert('La Vista de Archivo Mensual es exclusiva para usuarios AromAI PRO.');
+                    return;
+                  }
+                  setHistoryView('calendar');
+                }}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${historyView === 'calendar' ? 'bg-slate-700 text-emerald-400 shadow' : 'text-slate-400 hover:text-slate-200'}`}
+              >
+                {!isPro && <svg className="w-3 h-3 text-amber-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" /></svg>}
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                <span className="hidden sm:inline">Archivo</span>
+              </button>
+            </div>
           </div>
 
-          <div 
-            ref={scrollContainerRef}
-            onMouseDown={handleMouseDown}
-            onMouseLeave={handleMouseLeave}
-            onMouseUp={handleMouseUp}
-            onMouseMove={handleMouseMove}
-            className="flex gap-4 overflow-x-auto pb-6 snap-x hide-scrollbar select-none"
-          >
-            {history.map((item, index) => {
-              const date = new Date(item.created_at);
-              const timeString = date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+          {historyView === 'carousel' ? (
+            <div 
+              ref={scrollContainerRef}
+              onMouseDown={handleMouseDown}
+              onMouseLeave={handleMouseLeave}
+              onMouseUp={handleMouseUp}
+              onMouseMove={handleMouseMove}
+              className="flex gap-4 overflow-x-auto pb-6 snap-x hide-scrollbar select-none"
+            >
+              {history.map((item, index) => {
+                const date = new Date(item.created_at);
+                const timeString = date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
-              return (
-                <div
-                  key={item.log_id || index}
-                  onClick={() => {
-                    if (hasDragged.current) return;
-                    loadFromHistory(item);
-                  }}
-                  className="min-w-[280px] sm:min-w-[320px] bg-slate-800/60 hover:bg-slate-800 border border-slate-700 hover:border-emerald-500/50 rounded-2xl p-4 cursor-pointer transition-all snap-start flex items-center gap-4 group"
-                >
-                  <div className="w-16 h-16 rounded-xl bg-slate-900 overflow-hidden flex-shrink-0 border border-slate-700 relative">
-                    {item.winner?.image_url && (
-                      <img src={item.winner.image_url} alt={item.winner.name} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
-                    )}
-                    {item.feedback === true && (
-                      <div className="absolute -top-1 -right-1 bg-emerald-500 rounded-full w-5 h-5 flex items-center justify-center text-[10px] border-2 border-slate-900">👍</div>
-                    )}
-                    {item.feedback === false && (
-                      <div className="absolute -top-1 -right-1 bg-red-500 rounded-full w-5 h-5 flex items-center justify-center text-[10px] border-2 border-slate-900">👎</div>
-                    )}
+                return (
+                  <div
+                    key={item.log_id || index}
+                    onClick={() => {
+                      if (hasDragged.current) return;
+                      loadFromHistory(item);
+                    }}
+                    className="min-w-[280px] sm:min-w-[320px] bg-slate-800/60 hover:bg-slate-800 border border-slate-700 hover:border-emerald-500/50 rounded-2xl p-4 cursor-pointer transition-all snap-start flex items-center gap-4 group"
+                  >
+                    <div className="w-16 h-16 rounded-xl bg-slate-900 overflow-hidden flex-shrink-0 border border-slate-700 relative">
+                      {item.winner?.image_url && (
+                        <img src={item.winner.image_url} alt={item.winner.name} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+                      )}
+                      {item.feedback === true && (
+                        <div className="absolute -top-1 -right-1 bg-emerald-500 rounded-full w-5 h-5 flex items-center justify-center text-[10px] border-2 border-slate-900">👍</div>
+                      )}
+                      {item.feedback === false && (
+                        <div className="absolute -top-1 -right-1 bg-red-500 rounded-full w-5 h-5 flex items-center justify-center text-[10px] border-2 border-slate-900">👎</div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-slate-500 mb-1">{timeString} • {item.context?.temp}°C</p>
+                      <p className="text-sm font-bold text-slate-200 truncate">{item.winner?.name}</p>
+                      <p className="text-xs text-slate-400 truncate uppercase tracking-wider">{item.winner?.brand}</p>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs text-slate-500 mb-1">{timeString} • {item.context?.temp}°C</p>
-                    <p className="text-sm font-bold text-slate-200 truncate">{item.winner?.name}</p>
-                    <p className="text-xs text-slate-400 truncate uppercase tracking-wider">{item.winner?.brand}</p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          ) : (
+            <InstagramCalendar history={history} />
+          )}
         </div>
       )}
 

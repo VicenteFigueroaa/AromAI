@@ -1,5 +1,5 @@
 import { createClient } from '@/utils/supabase/server'
-import PerfumeCard from '@/components/PerfumeCard'
+import ShelfGallery from '@/components/ShelfGallery'
 import Link from 'next/link'
 
 export default async function MiEstante() {
@@ -10,13 +10,14 @@ export default async function MiEstante() {
     return null // O redirigir, aunque el middleware ya lo hace
   }
 
-  // Obtener el inventario con un JOIN a la caché de perfumes
+    // Obtener el inventario con un JOIN a la caché de perfumes
     const { data: inventoryItems, error } = await supabase
     .from('inventory')
     .select(`
       id,
       added_at,
       custom_image_url,
+      is_active,
       perfumes:global_perfume_cache (
         id,
         name,
@@ -64,21 +65,7 @@ export default async function MiEstante() {
             </Link>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {inventoryItems.map((item: any) => {
-              const perfume = Array.isArray(item.perfumes) ? item.perfumes[0] : item.perfumes
-              if (!perfume) return null
-
-              return (
-                <PerfumeCard 
-                  key={item.id} 
-                  inventoryId={item.id} 
-                  perfume={perfume}
-                  customImageUrl={item.custom_image_url} 
-                />
-              )
-            })}
-          </div>
+          <ShelfGallery inventoryItems={inventoryItems} />
         )}
       </div>
     </main>

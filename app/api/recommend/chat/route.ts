@@ -54,7 +54,8 @@ export async function POST(request: Request) {
           ai_metadata
         )
       `)
-      .eq('user_id', user.id);
+      .eq('user_id', user.id)
+      .eq('is_active', true);
 
     if (error || !inventoryItems || inventoryItems.length === 0) {
       return NextResponse.json({ error: 'Tu estante está vacío.' }, { status: 400 });
