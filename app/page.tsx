@@ -418,6 +418,20 @@ export default function Home() {
           </div>
 
           <div className="p-6">
+            {/* ALERTA DE INVENTARIO */}
+            {result.inventory_similarity?.has_similar && (
+              <div className="mb-5 bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex items-start gap-3 shadow-lg">
+                <span className="text-amber-400 mt-0.5 text-xl">💡</span>
+                <div>
+                  <h4 className="text-amber-400 font-bold text-sm tracking-wide">Se parece a tu colección</h4>
+                  <p className="text-amber-200/80 text-xs mt-1 leading-relaxed">
+                    Atención, este perfume es muy similar a <strong>{result.inventory_similarity.similar_to}</strong> que ya tienes en tu estante. <br/>
+                    <span className="italic text-[10px] mt-1 block opacity-80">"{result.inventory_similarity.reason}"</span>
+                  </p>
+                </div>
+              </div>
+            )}
+
             <h2 className="text-2xl font-bold text-white mb-1">{result.data.name}</h2>
             <div className="flex items-center gap-2 mb-4">
               <p className="text-sm tracking-wide text-blue-400 uppercase font-semibold">{result.data.brand}</p>

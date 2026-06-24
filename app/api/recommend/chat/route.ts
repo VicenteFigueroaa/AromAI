@@ -138,14 +138,19 @@ export async function POST(request: Request) {
     }
 
     // Actualizar el log original en la base de datos para que la caché refleje la nueva decisión
-    await supabaseAdmin
+    const { error: updateError } = await supabaseAdmin
       .from('recommendation_logs')
       .update({
-        global_perfume_cache_id: finalWinner.id,
+        recommended_perfume_id: finalWinner.id,
         reasoning: aiDecision.justification
       })
       .eq('id', log_id)
       .eq('user_id', user.id); // Seguridad
+
+    if (updateError) {
+      console.error('❌ Error al actualizar recommendation_logs:', updateError);
+      throw new Error("No se pudo guardar la recomendación refinada.");
+    }
 
     return NextResponse.json({
       winner: finalWinner,

@@ -13,7 +13,7 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-async function fetchPerfumeImageUrl(brand: string, name: string, concentration: string): Promise<string | null> {
+async function fetchPerfumeImageUrls(brand: string, name: string, concentration: string): Promise<string[]> {
   try {
     const query = `${brand} ${name} ${concentration} perfume bottle`;
 
@@ -29,20 +29,10 @@ async function fetchPerfumeImageUrl(brand: string, name: string, concentration: 
     const serperData = await serperResponse.json();
     const images = serperData.images ?? [];
 
-    for (const img of images) {
-      const url: string = img.imageUrl ?? '';
-      if (url.match(/\.(jpg|jpeg|png|webp)(\?|$)/i) ||
-        url.includes('fragrantica.com') ||
-        url.includes('wikimedia.org') ||
-        url.includes('cloudinary.com')) {
-        return url;
-      }
-    }
-
-    return null;
+    return images.map((img: any) => img.imageUrl).filter(Boolean);
   } catch (e) {
     console.warn('⚠️ Serper image search falló:', e);
-    return null;
+    return [];
   }
 }
 
@@ -83,6 +73,27 @@ export async function POST(request: Request) {
       }, { status: 403 });
     }
     // ---------------------------------------
+
+    // Obtener el inventario del usuario para comparación
+    const { data: inventoryItems } = await supabaseAdmin
+      .from('inventory')
+      .select(`
+        perfumes:global_perfume_cache (
+          name,
+          brand,
+          top_notes,
+          heart_notes,
+          base_notes
+        )
+      `)
+      .eq('user_id', user.id)
+      .eq('is_active', true);
+
+    const userInventory = (inventoryItems || []).map((item: any) => {
+      const p = Array.isArray(item.perfumes) ? item.perfumes[0] : item.perfumes;
+      return p ? `${p.brand} ${p.name}` : null;
+    }).filter(Boolean);
+    const hasInventory = userInventory.length > 0;
 
     // Detectar si el usuario especificó una concentración explícita en el texto
     const concentrationRegex = /\b(EDT|EDP|Parfum|Elixir|Intense|Cologne|Eau de Toilette|Eau de Parfum)\b/i;
@@ -142,10 +153,38 @@ export async function POST(request: Request) {
             .eq('id', user.id);
         }
 
+        let inventory_similarity = null;
+        if (hasInventory) {
+          try {
+            const checkPrompt = `El usuario busca el perfume: "${cachedPerfume.brand} ${cachedPerfume.name}" (Notas: ${JSON.stringify(cachedPerfume.top_notes)} / ${JSON.stringify(cachedPerfume.heart_notes)} / ${JSON.stringify(cachedPerfume.base_notes)}).
+Su inventario actual es: ${userInventory.join(", ")}.
+¿El perfume buscado es altamente similar o redundante con alguno de los que ya tiene en su inventario basándose en el perfil olfativo?
+Responde estrictamente en formato JSON válido:
+{"has_similar": true/false, "similar_to": "Nombre del perfume en inventario (o null)", "reason": "Breve explicación de 1 línea de por qué se parecen (o null)"}
+Solo JSON, sin formato markdown.`;
+
+            const checkResponse = await ai.models.generateContent({
+              model: 'gemini-3.1-flash-lite',
+              contents: checkPrompt,
+              config: { temperature: 0.1 }
+            });
+
+            const checkText = checkResponse.text ?? '';
+            const si = checkText.indexOf('{');
+            const ei = checkText.lastIndexOf('}');
+            if (si !== -1 && ei !== -1) {
+              inventory_similarity = JSON.parse(checkText.substring(si, ei + 1));
+            }
+          } catch(e) {
+            console.error("Error en comparación Lite:", e);
+          }
+        }
+
         return NextResponse.json({
           source: 'cache',
           data: cachedPerfume,
-          variants: cachedPerfume.variants ?? []
+          variants: cachedPerfume.variants ?? [],
+          inventory_similarity
         });
       }
     }
@@ -195,9 +234,9 @@ export async function POST(request: Request) {
             "peer": { "brand": "Marca", "name": "Nombre", "reason": "Motivo corto de 1 línea" },
             "upgrade": { "brand": "Marca", "name": "Nombre", "reason": "Motivo corto de 1 línea" }
           }
-        }
+        }${hasInventory ? `,\n        "inventory_similarity": {\n          "has_similar": true/false,\n          "similar_to": "Nombre (o null)",\n          "reason": "Razón corta de 1 línea (o null)"\n        }` : ''}
       }
-      NOTA PARA ai_metadata: En clima, formalidad y momento, devuelve un arreglo (array) solo con las opciones donde el perfume realmente brille. Puede ser más de una.
+      NOTA PARA ai_metadata: En clima, formalidad y momento, devuelve un arreglo (array) solo con las opciones donde el perfume realmente brille. Puede ser más de una.${hasInventory ? `\n      NOTA SOBRE INVENTARIO: El usuario tiene estos perfumes en su estante: ${userInventory.join(", ")}. Evalúa si el perfume buscado se parece mucho a alguno de ellos y ponlo en "inventory_similarity". Si no tiene similitud, pon "has_similar": false.` : ''}
     `;
 
     // Construir el contenido según si hay imagen o solo texto
@@ -222,8 +261,13 @@ export async function POST(request: Request) {
 
     const responseText = response.text ?? '';
 
-    // Limpiamos la respuesta en caso de que la IA agregue comillas de código Markdown (```json ... ```)
-    const cleanJsonText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+    // Extraer estrictamente el bloque JSON para ignorar cualquier texto conversacional adicional
+    const jsonStartIndex = responseText.indexOf('{');
+    const jsonEndIndex = responseText.lastIndexOf('}');
+    if (jsonStartIndex === -1 || jsonEndIndex === -1) {
+      throw new Error('La IA no devolvió un JSON válido. Respuesta cruda: ' + responseText);
+    }
+    const cleanJsonText = responseText.substring(jsonStartIndex, jsonEndIndex + 1);
 
     let parsedData;
     try {
@@ -246,6 +290,8 @@ export async function POST(request: Request) {
       base_notes: parsedData.base_notes || parsedData.Base_notes || parsedData.Base_Notes || parsedData.baseNotes || [],
       ai_metadata: parsedData.ai_metadata || parsedData.Ai_metadata || parsedData.AI_Metadata || parsedData.aiMetadata || {}
     };
+
+    const inventory_similarity = parsedData.inventory_similarity || parsedData.Inventory_similarity || null;
 
     // Si el usuario pidió explícitamente una concentración, forzamos esa (la IA a veces la ignora)
     if (userRequestedConcentration) {
@@ -306,18 +352,18 @@ export async function POST(request: Request) {
       }
 
       // Si ya existía bajo el nombre oficial, lo devolvemos y listo
-      return NextResponse.json({ source: 'canonical_cache', data: canonicalPerfume, variants: canonicalPerfume.variants ?? aiData.variants });
+      return NextResponse.json({ source: 'canonical_cache', data: canonicalPerfume, variants: canonicalPerfume.variants ?? aiData.variants, inventory_similarity });
     }
 
-    const imageUrlFromSerper = await fetchPerfumeImageUrl(aiData.brand, aiData.name, aiData.concentration);
-    let finalImageUrl: string | null = imageUrlFromSerper;
+    const imageUrlsFromSerper = await fetchPerfumeImageUrls(aiData.brand, aiData.name, aiData.concentration);
+    let finalImageUrl: string | null = null;
 
-    if (imageUrlFromSerper) {  // 👈 Antes era: if (aiData.image_url)
+    for (const url of imageUrlsFromSerper) {
       try {
-        const imgResponse = await fetch(imageUrlFromSerper, {  // 👈 Usa imageUrlFromSerper
+        const imgResponse = await fetch(url, {
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Referer': new URL(imageUrlFromSerper).origin,
+            'Referer': new URL(url).origin,
             'Accept': 'image/webp,image/jpeg,image/png,image/*'
           }
         });
@@ -351,17 +397,14 @@ export async function POST(request: Request) {
               .getPublicUrl(fileName);
 
             finalImageUrl = publicUrl.publicUrl;
-          } else {
-            finalImageUrl = null; // Upload falló
+            break; // Éxito, salimos del bucle
           }
         } else {
           // El sitio bloqueó el acceso o no es una imagen
           console.warn(`⚠️ URL bloqueada o no es imagen. Content-Type: ${contentType}`);
-          finalImageUrl = null;
         }
       } catch (e) {
-        console.warn('⚠️ No se pudo guardar imagen:', e);
-        finalImageUrl = null;
+        console.warn(`⚠️ Falló la descarga de la imagen ${url}:`, e);
       }
     }
 
@@ -404,9 +447,10 @@ export async function POST(request: Request) {
 
     // 6. RESPUESTA FINAL
     return NextResponse.json({
-      source: 'ai_live_and_cached',
-      data: insertedPerfume,
-      variants: aiData.variants
+      source: 'ai',
+      data: newPerfume,
+      variants: aiData.variants,
+      inventory_similarity
     });
 
   } catch (error: any) {
