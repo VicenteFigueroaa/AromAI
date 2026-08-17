@@ -14,6 +14,9 @@ export default function RecomendacionPage() {
   const [feedbackGiven, setFeedbackGiven] = useState<'positive' | 'negative' | null>(null);
   const [history, setHistory] = useState<any[]>([]);
   const [historyView, setHistoryView] = useState<'carousel' | 'calendar'>('carousel');
+  const [needsManualLocation, setNeedsManualLocation] = useState(false);
+  const [manualCity, setManualCity] = useState('');
+  const [quickPrompts, setQuickPrompts] = useState<{id: string, prompt_text: string}[]>([]);
 
   // Chat State
   const [isPro, setIsPro] = useState(false);
@@ -69,7 +72,19 @@ export default function RecomendacionPage() {
         if (res.isPro !== undefined) setIsPro(res.isPro);
       }
     }
+    async function loadQuickPrompts() {
+      try {
+        const res = await fetch('/api/quick-prompts');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.prompts) setQuickPrompts(data.prompts);
+        }
+      } catch (err) {
+        console.error('Error fetching quick prompts', err);
+      }
+    }
     loadHistory();
+    loadQuickPrompts();
   }, []);
 
   const loadFromHistory = (item: any) => {
@@ -86,53 +101,58 @@ export default function RecomendacionPage() {
     setChatMessage('');
   };
 
-  const getRecommendation = async () => {
+  const getRecommendation = async (cityOverride?: string) => {
     setLoading(true);
     setError(null);
     setResult(null);
     setFeedbackGiven(null);
+    setNeedsManualLocation(false);
 
     try {
-      // 1. Intentar obtener ubicación GPS (no bloquea si falla)
-      setStatusText('Consultando al satélite tu ubicación...');
       let latitude: number | undefined;
       let longitude: number | undefined;
+      let city: string | undefined = cityOverride;
 
-      try {
-        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-          if (!navigator.geolocation) reject(new Error('no_support'));
+      if (!cityOverride) {
+        // 1. Intentar obtener ubicación GPS (no bloquea si falla)
+        setStatusText('Consultando al satélite tu ubicación...');
+        try {
+          const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+            if (!navigator.geolocation) reject(new Error('no_support'));
 
-          // Mostrar progreso mientras espera al GPS
-          const statusTimer = setTimeout(() => {
-            setStatusText('Buscando señal GPS... esto puede tardar unos segundos');
-          }, 3000);
+            // Mostrar progreso mientras espera al GPS
+            const statusTimer = setTimeout(() => {
+              setStatusText('Buscando señal GPS... esto puede tardar unos segundos');
+            }, 3000);
 
-          navigator.geolocation.getCurrentPosition(
-            (pos) => { clearTimeout(statusTimer); resolve(pos); },
-            (err) => { clearTimeout(statusTimer); reject(err); },
-            {
-              timeout: 10000,
-              enableHighAccuracy: true,
-              maximumAge: 120000 // Reusar ubicación de los últimos 2 minutos
-            }
-          );
-        });
-        latitude = position.coords.latitude;
-        longitude = position.coords.longitude;
-        setLocationPermitted(true);
-      } catch (geoErr) {
-        // GPS falló, no pasa nada — el servidor usará tu IP
-        console.warn('📍 GPS no disponible, usando ubicación aproximada por IP');
-        setStatusText('Usando ubicación aproximada...');
-        setLocationPermitted(false);
+            navigator.geolocation.getCurrentPosition(
+              (pos) => { clearTimeout(statusTimer); resolve(pos); },
+              (err) => { clearTimeout(statusTimer); reject(err); },
+              {
+                timeout: 10000,
+                enableHighAccuracy: true,
+                maximumAge: 120000 // Reusar ubicación de los últimos 2 minutos
+              }
+            );
+          });
+          latitude = position.coords.latitude;
+          longitude = position.coords.longitude;
+          setLocationPermitted(true);
+        } catch (geoErr) {
+          console.warn('📍 GPS denegado o no disponible.');
+          setStatusText('');
+          setNeedsManualLocation(true);
+          setLoading(false);
+          return; // Detener la ejecución para mostrar el formulario manual
+        }
       }
 
       // 2. Consultar a nuestra API (Ella se encarga de WeatherAPI y Gemini)
-      setStatusText('Analizando clima, humedad e inventario...');
+      setStatusText(cityOverride ? `Analizando clima en ${cityOverride}...` : 'Analizando clima, humedad e inventario...');
       const aiRes = await fetch('/api/recommend', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ latitude, longitude, preContextMessage })
+        body: JSON.stringify({ latitude, longitude, city, preContextMessage })
       });
 
       const aiData = await aiRes.json();
@@ -273,10 +293,29 @@ export default function RecomendacionPage() {
             )}
           </div>
 
+          {/* Quick Prompts Chips */}
+          {quickPrompts.length > 0 && (
+            <div className="flex flex-wrap justify-center gap-2 mt-2 mb-2 w-full">
+              {quickPrompts.map((qp) => (
+                <button
+                  key={qp.id}
+                  onClick={() => setPreContextMessage(qp.prompt_text)}
+                  disabled={loading}
+                  className="bg-slate-800 border border-slate-700 text-slate-300 text-xs px-3 py-1.5 rounded-full hover:bg-slate-700 hover:text-white transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <svg className="w-3 h-3 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  {qp.prompt_text}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* Main Button */}
           <button
-            onClick={getRecommendation}
-            disabled={loading}
+            onClick={() => getRecommendation()}
+            disabled={loading || needsManualLocation}
             className="w-full relative group overflow-hidden bg-slate-800 hover:bg-slate-700 disabled:opacity-80 border border-slate-700 hover:border-emerald-500/50 shadow-2xl rounded-3xl p-1 transition-all duration-300 transform hover:scale-[1.02] active:scale-95"
           >
             <div className="absolute inset-0 bg-gradient-to-r from-emerald-500 to-blue-500 opacity-0 group-hover:opacity-20 transition-opacity"></div>
@@ -302,6 +341,36 @@ export default function RecomendacionPage() {
               </div>
             </div>
           </button>
+
+          {/* Ingreso manual de ciudad si falla el GPS */}
+          {needsManualLocation && !loading && (
+            <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-6 text-center mt-4 w-full animate-fade-in">
+              <svg className="w-8 h-8 text-red-400 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              <h3 className="text-white font-medium mb-2">No pudimos ubicarte</h3>
+              <p className="text-slate-400 text-sm mb-4">
+                El GPS falló o está desactivado. Escribe el nombre de tu ciudad manualmente:
+              </p>
+              <div className="flex gap-2 w-full">
+                <input 
+                  type="text" 
+                  placeholder="Ej. Madrid, Santiago..." 
+                  value={manualCity}
+                  onChange={(e) => setManualCity(e.target.value)}
+                  className="flex-1 bg-slate-800/80 border border-slate-700 rounded-xl px-4 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-red-400 transition-colors"
+                />
+                <button 
+                  onClick={() => getRecommendation(manualCity)}
+                  disabled={!manualCity.trim()}
+                  className="bg-white text-slate-900 px-5 py-2 rounded-xl font-medium disabled:opacity-50 transition-colors hover:bg-slate-200"
+                >
+                  Ir
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

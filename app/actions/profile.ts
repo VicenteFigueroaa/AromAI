@@ -138,11 +138,38 @@ export async function getProfileData() {
     `)
     .eq('user_id', user.id)
 
-  // 3. Conteo de recomendaciones IA
-  const { count: aiRecommendations } = await supabase
+  // 3. Conteo de recomendaciones IA y recuperación para perfume favorito
+  const { data: recommendationLogs, count: aiRecommendations } = await supabase
     .from('recommendation_logs')
-    .select('*', { count: 'exact', head: true })
+    .select(`
+      recommended_perfume_id, 
+      perfumes:global_perfume_cache(name, brand, image_url)
+    `, { count: 'exact' })
     .eq('user_id', user.id)
+
+  // --- Perfume Favorito (Más Recomendado) ---
+  let favoritePerfume = null;
+  if (recommendationLogs && recommendationLogs.length > 0) {
+    const counts: Record<string, { count: number, details: any }> = {};
+    for (const log of recommendationLogs) {
+      if (!log.recommended_perfume_id || !log.perfumes) continue;
+      const pid = log.recommended_perfume_id;
+      if (!counts[pid]) {
+        counts[pid] = { count: 0, details: Array.isArray(log.perfumes) ? log.perfumes[0] : log.perfumes };
+      }
+      counts[pid].count += 1;
+    }
+    
+    const topPerfumeEntry = Object.values(counts).sort((a, b) => b.count - a.count)[0];
+    if (topPerfumeEntry && topPerfumeEntry.count > 0) {
+      favoritePerfume = {
+        name: topPerfumeEntry.details.name,
+        brand: topPerfumeEntry.details.brand,
+        image_url: topPerfumeEntry.details.image_url,
+        count: topPerfumeEntry.count
+      };
+    }
+  }
 
   // --- Procesamiento de estadísticas ---
   const totalPerfumes = inventoryItems?.length || 0
@@ -205,6 +232,7 @@ export async function getProfileData() {
       favoriteBrand,
       aiRecommendations: aiRecommendations || 0,
     },
+    favoritePerfume,
     olfactoryDNA,
   }
 }

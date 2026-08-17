@@ -12,7 +12,7 @@ export default async function PerfilPage() {
   const data = await getProfileData()
   if (!data.success) redirect('/login')
 
-  const { user: userData, credits, adsWatchedToday, isPro, stats, olfactoryDNA } = data as any
+  const { user: userData, credits, adsWatchedToday, isPro, stats, olfactoryDNA, favoritePerfume } = data as any
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-50 p-6 sm:p-12 font-sans relative overflow-hidden">
@@ -131,6 +131,42 @@ export default async function PerfilPage() {
             <StatCard emoji="⭐" label="Marca Favorita" value={stats.favoriteBrand} isText />
           </div>
         </section>
+
+        {/* ========== SECCIÓN 3.5: PERFUME FAVORITO (IA) ========== */}
+        {favoritePerfume && (
+          <section className="mb-8">
+            <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
+              <span className="text-yellow-400">👑</span> Perfume Estrella
+            </h2>
+            <div className="bg-gradient-to-br from-slate-900 to-slate-800 border border-emerald-500/30 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-emerald-500/10 flex flex-col sm:flex-row items-center gap-6 relative overflow-hidden group">
+              <div className="absolute -top-10 -right-10 w-40 h-40 bg-emerald-500/20 blur-[60px] rounded-full pointer-events-none transition-all duration-700 group-hover:scale-150"></div>
+              
+              {/* Imagen o Ícono */}
+              <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-2xl bg-slate-800 border border-slate-700 flex-shrink-0 flex items-center justify-center overflow-hidden z-10 shadow-xl">
+                {favoritePerfume.image_url ? (
+                  <img src={favoritePerfume.image_url} alt={favoritePerfume.name} className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-4xl">✨</span>
+                )}
+              </div>
+
+              {/* Detalles */}
+              <div className="flex-1 text-center sm:text-left z-10">
+                <div className="inline-flex items-center gap-2 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-bold px-3 py-1 rounded-full mb-3">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  Recomendado {favoritePerfume.count} veces
+                </div>
+                <h3 className="text-2xl sm:text-3xl font-black text-white mb-1">
+                  {favoritePerfume.name}
+                </h3>
+                <p className="text-slate-400 text-lg">{favoritePerfume.brand}</p>
+                <p className="text-slate-500 text-sm mt-3 max-w-md mx-auto sm:mx-0">
+                  Este es tu as bajo la manga. La inteligencia artificial lo ha seleccionado como tu mejor opción recurrente.
+                </p>
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* ========== SECCIÓN 4: ADN OLFATIVO ========== */}
         <section className="bg-slate-900/80 backdrop-blur border border-slate-800 rounded-3xl p-8 shadow-2xl">

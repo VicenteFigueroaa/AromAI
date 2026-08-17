@@ -15,10 +15,19 @@ export async function POST(request: Request) {
     }
 
     // 2. Obtener datos desde el cliente
-    const { latitude, longitude, preContextMessage } = await request.json();
+    const { latitude, longitude, city, preContextMessage } = await request.json();
 
-    if (!latitude || !longitude) {
-      return NextResponse.json({ error: 'Coordenadas no proporcionadas' }, { status: 400 });
+    let queryParam = "";
+    if (latitude && longitude) {
+      queryParam = `${latitude},${longitude}`;
+    } else if (city) {
+      queryParam = city;
+    } else {
+      if (process.env.NODE_ENV === 'development') {
+        queryParam = "Santiago"; // Fallback salvavidas para desarrollo local
+      } else {
+        return NextResponse.json({ error: 'Coordenadas o ciudad no proporcionada' }, { status: 400 });
+      }
     }
 
     // 3. Consultar WeatherAPI.com (Server-side para proteger la KEY)
@@ -28,7 +37,7 @@ export async function POST(request: Request) {
     }
 
     const weatherRes = await fetch(
-      `https://api.weatherapi.com/v1/forecast.json?key=${weatherKey}&q=${latitude},${longitude}&days=1&lang=es`
+      `https://api.weatherapi.com/v1/forecast.json?key=${weatherKey}&q=${queryParam}&days=1&lang=es`
     );
     
     if (!weatherRes.ok) {
@@ -37,6 +46,7 @@ export async function POST(request: Request) {
 
     const weatherData = await weatherRes.json();
     const current = weatherData.current;
+    const location = weatherData.location;
 
     const hourlyForecast = weatherData.forecast?.forecastday?.[0]?.hour?.map((h: any) => ({
       time: h.time.split(' ')[1],
@@ -55,6 +65,8 @@ export async function POST(request: Request) {
 
     // Extraer datos interesantes para la IA
     const weatherContext = {
+      locationName: location?.name || 'Desconocida',
+      locationCountry: location?.country || 'Desconocido',
       temp: current.temp_c,
       feelsLike: current.feelslike_c,
       humidity: current.humidity,
@@ -203,6 +215,34 @@ export async function POST(request: Request) {
       console.error('❌ ERROR GRAVE: No se pudo guardar en recommendation_logs:', insertError);
     } else {
       console.log('✅ Log guardado correctamente con ID:', insertedLog?.id);
+    }
+
+    // Guardar Quick Prompt si el usuario escribió uno
+    if (preContextMessage && preContextMessage.trim().length > 0) {
+      const promptText = preContextMessage.trim();
+      const { data: existingPrompt } = await supabase
+        .from('user_quick_prompts')
+        .select('id, usage_count')
+        .eq('user_id', user.id)
+        .eq('prompt_text', promptText)
+        .single();
+
+      if (existingPrompt) {
+        await supabase
+          .from('user_quick_prompts')
+          .update({ 
+            usage_count: existingPrompt.usage_count + 1, 
+            last_used_at: new Date().toISOString() 
+          })
+          .eq('id', existingPrompt.id);
+      } else {
+        await supabase
+          .from('user_quick_prompts')
+          .insert({ 
+            user_id: user.id, 
+            prompt_text: promptText 
+          });
+      }
     }
 
     return NextResponse.json({ 

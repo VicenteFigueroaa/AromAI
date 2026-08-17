@@ -27,11 +27,16 @@ async function fetchPerfumeImageUrls(brand: string, name: string, concentration:
     });
 
     const serperData = await serperResponse.json();
-    const images = serperData.images ?? [];
 
+    if (!serperResponse.ok) {
+      console.error(`❌ Serper API Error (${serperResponse.status}):`, serperData);
+      return [];
+    }
+
+    const images = serperData.images ?? [];
     return images.map((img: any) => img.imageUrl).filter(Boolean);
-  } catch (e) {
-    console.warn('⚠️ Serper image search falló:', e);
+  } catch (e: any) {
+    console.error('⚠️ Serper image search falló por excepción:', e.message);
     return [];
   }
 }
@@ -370,42 +375,51 @@ Solo JSON, sin formato markdown.`;
 
         const contentType = imgResponse.headers.get('content-type') || '';
 
-        // ✅ Validar que sea realmente una imagen antes de pasarla a Sharp
-        if (imgResponse.ok && contentType.startsWith('image/')) {
+        // Si la respuesta es OK, intentamos pasarla a Sharp (él detectará si es imagen real)
+        if (imgResponse.ok) {
           const buffer = Buffer.from(await imgResponse.arrayBuffer());
 
-          const compressedBuffer = await sharp(buffer)
-            .resize(400, 400, {
-              fit: 'inside',
-              withoutEnlargement: true
-            })
-            .webp({ quality: 80 })
-            .toBuffer();
+          let compressedBuffer;
+          try {
+            compressedBuffer = await sharp(buffer)
+              .resize(400, 400, { fit: 'inside', withoutEnlargement: true })
+              .webp({ quality: 80 })
+              .toBuffer();
+          } catch (sharpErr: any) {
+            console.warn(`⚠️ Sharp no pudo procesar la imagen de ${url} (Content-Type: ${contentType}):`, sharpErr.message);
+            continue; // Pasamos a la siguiente URL
+          }
 
           const fileName = `${canonicalKey}.webp`;
 
-          const { data: uploaded } = await supabaseAdmin.storage
+          const { data: uploaded, error: uploadError } = await supabaseAdmin.storage
             .from('perfume-images')
             .upload(fileName, compressedBuffer, {
               contentType: 'image/webp',
               upsert: true
             });
 
-          if (uploaded) {
+          if (uploadError) {
+            console.error(`❌ Error subiendo a Supabase para ${fileName}:`, uploadError);
+          } else if (uploaded) {
             const { data: publicUrl } = supabaseAdmin.storage
               .from('perfume-images')
               .getPublicUrl(fileName);
 
             finalImageUrl = publicUrl.publicUrl;
+            console.log(`✅ Imagen descargada y subida exitosamente: ${finalImageUrl}`);
             break; // Éxito, salimos del bucle
           }
         } else {
-          // El sitio bloqueó el acceso o no es una imagen
-          console.warn(`⚠️ URL bloqueada o no es imagen. Content-Type: ${contentType}`);
+          console.warn(`⚠️ URL retornó código ${imgResponse.status} - Content-Type: ${contentType} - URL: ${url}`);
         }
-      } catch (e) {
-        console.warn(`⚠️ Falló la descarga de la imagen ${url}:`, e);
+      } catch (e: any) {
+        console.warn(`⚠️ Falló la descarga de la imagen ${url}:`, e.message);
       }
+    }
+
+    if (!finalImageUrl) {
+      console.error(`❌ Agotamos las ${imageUrlsFromSerper.length} URLs de Serper y NINGUNA pudo ser procesada/subida.`);
     }
 
 
