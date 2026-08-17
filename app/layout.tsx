@@ -29,18 +29,34 @@ export const metadata: Metadata = {
 
 import Sidebar from "@/components/Sidebar";
 import BottomNav from "@/components/BottomNav";
+import { createClient } from "@/utils/supabase/server";
+import ForcePasswordChangeModal from "@/components/ForcePasswordChangeModal";
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  let requiresPasswordChange = false;
+  if (user) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('requires_password_change')
+      .eq('id', user.id)
+      .single();
+    requiresPasswordChange = profile?.requires_password_change || false;
+  }
+
   return (
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex bg-slate-950 text-slate-50 relative pb-20 md:pb-0">
+        {requiresPasswordChange && <ForcePasswordChangeModal userId={user!.id} />}
         <Sidebar />
         <div className="flex-1 overflow-y-auto">
           {children}
