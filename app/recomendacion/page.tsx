@@ -92,7 +92,9 @@ export default function RecomendacionPage() {
       source: 'history',
       log_id: item.log_id,
       winner: item.winner,
+      winner_percentage: item.winner_percentage,
       justification: item.justification,
+      alternative: item.alternative || null,
       context: item.context
     });
     setFeedbackGiven(item.feedback === true ? 'positive' : item.feedback === false ? 'negative' : null);
@@ -177,7 +179,9 @@ export default function RecomendacionPage() {
             log_id: aiData.log_id,
             created_at: new Date().toISOString(),
             winner: aiData.winner,
+            winner_percentage: aiData.winner_percentage,
             justification: aiData.justification,
+            alternative: aiData.alternative || null,
             context: aiData.context,
             feedback: null
           }, ...prev];
@@ -245,7 +249,9 @@ export default function RecomendacionPage() {
       setResult({
         ...result,
         winner: data.winner,
+        winner_percentage: data.winner_percentage,
         justification: data.justification,
+        alternative: data.alternative,
         source: 'live'
       });
       setChatMessage('');
@@ -585,12 +591,65 @@ export default function RecomendacionPage() {
             </button>
           </div>
 
-          {/* Tarjeta del Perfume */}
-          <div className="w-full max-w-sm mx-auto pointer-events-none order-1 md:order-2">
-            <div className="relative">
+          {/* Tarjetas de Perfumes (Ganador y Alternativa) */}
+          <div className="w-full max-w-sm mx-auto order-1 md:order-2 flex flex-col gap-6">
+            
+            {/* Perfume Ganador Principal */}
+            <div className="relative pointer-events-none">
               <div className="absolute -inset-4 bg-emerald-500/20 blur-xl rounded-full animate-pulse"></div>
               <PerfumeCard perfume={result.winner} />
+              {/* Etiqueta Porcentaje Ganador */}
+              {result.winner_percentage !== undefined && result.winner_percentage !== null && (
+                <div className="absolute top-[-16px] right-[-16px] bg-gradient-to-br from-emerald-400 to-green-600 text-slate-950 font-black text-sm px-4 py-1.5 rounded-full border-2 border-slate-900 shadow-xl z-50 transform rotate-3">
+                  {result.winner_percentage}% Match
+                </div>
+              )}
             </div>
+
+            {/* Alternativa / Plan B */}
+            {result.alternative?.perfume && (
+              <div className="bg-slate-900/90 border border-slate-700/80 rounded-3xl p-5 shadow-2xl relative overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">🥈</span>
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-amber-400">Opción Alternativa</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {result.alternative.percentage !== undefined && result.alternative.percentage !== null && (
+                      <span className="text-[10px] font-black bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full border border-amber-500/30">
+                        {result.alternative.percentage}% Match
+                      </span>
+                    )}
+                    <span className="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full border border-slate-700">Plan B</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4 mb-3">
+                  {result.alternative.perfume.image_url ? (
+                    <img 
+                      src={result.alternative.perfume.image_url} 
+                      alt={result.alternative.perfume.name} 
+                      className="w-14 h-14 object-cover rounded-2xl border border-slate-700 flex-shrink-0 bg-slate-800 shadow-md"
+                    />
+                  ) : (
+                    <div className="w-14 h-14 rounded-2xl border border-slate-700 bg-slate-800 flex items-center justify-center text-2xl flex-shrink-0">
+                      🧴
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-white font-bold text-sm truncate">{result.alternative.perfume.name}</p>
+                    <p className="text-xs text-slate-400 uppercase tracking-wide truncate">{result.alternative.perfume.brand}</p>
+                  </div>
+                </div>
+
+                {result.alternative.justification && (
+                  <p className="text-xs text-slate-300 italic bg-slate-800/60 p-3 rounded-2xl border border-slate-700/50 leading-relaxed">
+                    "{result.alternative.justification}"
+                  </p>
+                )}
+              </div>
+            )}
+
           </div>
 
         </div>

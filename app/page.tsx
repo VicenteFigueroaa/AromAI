@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { addPerfumeToShelf } from "@/app/actions/inventory";
 
 export default function Home() {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
@@ -63,6 +65,12 @@ export default function Home() {
     const fetchUser = async () => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        router.push('/login');
+        return;
+      }
+
       setUser(user);
 
       if (user) {

@@ -34,9 +34,23 @@ export async function getRecommendationHistory() {
       id,
       weather_context,
       reasoning,
+      winner_percentage,
+      alternative_reasoning,
+      alternative_percentage,
       created_at,
       user_feedback,
-      perfumes:global_perfume_cache (
+      perfumes:global_perfume_cache!recommendation_logs_recommended_perfume_id_fkey (
+        id,
+        name,
+        brand,
+        image_url,
+        description,
+        top_notes,
+        heart_notes,
+        base_notes,
+        ai_metadata
+      ),
+      alternative_perfumes:global_perfume_cache!recommendation_logs_alternative_perfume_id_fkey (
         id,
         name,
         brand,
@@ -63,14 +77,25 @@ export async function getRecommendationHistory() {
   }
 
   // Mapeamos para asegurarnos de que la respuesta tenga el formato esperado por el frontend
-  const formattedHistory = history.map((log: any) => ({
-    log_id: log.id,
-    created_at: log.created_at,
-    winner: Array.isArray(log.perfumes) ? log.perfumes[0] : log.perfumes,
-    justification: log.reasoning,
-    context: log.weather_context,
-    feedback: log.user_feedback
-  }))
+  const formattedHistory = history.map((log: any) => {
+    const winner = Array.isArray(log.perfumes) ? log.perfumes[0] : log.perfumes;
+    const alternativePerfume = Array.isArray(log.alternative_perfumes) ? log.alternative_perfumes[0] : log.alternative_perfumes;
+    
+    return {
+      log_id: log.id,
+      created_at: log.created_at,
+      winner: winner,
+      winner_percentage: log.winner_percentage || 100,
+      justification: log.reasoning,
+      alternative: alternativePerfume ? {
+        perfume: alternativePerfume,
+        justification: log.alternative_reasoning,
+        percentage: log.alternative_percentage
+      } : null,
+      context: log.weather_context,
+      feedback: log.user_feedback
+    };
+  });
 
   return { success: true, history: formattedHistory, isPro }
 }

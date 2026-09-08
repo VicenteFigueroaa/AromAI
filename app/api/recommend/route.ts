@@ -87,7 +87,10 @@ export async function POST(request: Request) {
           id,
           reasoning,
           weather_context,
-          perfumes:global_perfume_cache (
+          winner_percentage,
+          alternative_reasoning,
+          alternative_percentage,
+          perfumes:global_perfume_cache!recommendation_logs_recommended_perfume_id_fkey (
             id,
             name,
             brand,
@@ -95,7 +98,19 @@ export async function POST(request: Request) {
             top_notes,
             heart_notes,
             base_notes,
-            ai_metadata
+            ai_metadata,
+            image_url
+          ),
+          alternative_perfumes:global_perfume_cache!recommendation_logs_alternative_perfume_id_fkey (
+            id,
+            name,
+            brand,
+            description,
+            top_notes,
+            heart_notes,
+            base_notes,
+            ai_metadata,
+            image_url
           )
         `)
         .eq('user_id', user.id)
@@ -104,12 +119,20 @@ export async function POST(request: Request) {
         .limit(1);
 
       if (cachedLogs && cachedLogs.length > 0) {
-        const cached = cachedLogs[0];
+        const cached = cachedLogs[0] as any;
         const p = Array.isArray(cached.perfumes) ? cached.perfumes[0] : cached.perfumes;
+        const alt = Array.isArray(cached.alternative_perfumes) ? cached.alternative_perfumes[0] : cached.alternative_perfumes;
+        
         if (p) {
           return NextResponse.json({
             winner: p,
+            winner_percentage: cached.winner_percentage || 100,
             justification: cached.reasoning,
+            alternative: alt ? {
+              perfume: alt,
+              justification: cached.alternative_reasoning,
+              percentage: cached.alternative_percentage
+            } : null,
             context: cached.weather_context,
             source: 'cache',
             log_id: cached.id
@@ -173,14 +196,21 @@ export async function POST(request: Request) {
       ${JSON.stringify(catalog, null, 2)}
       
       INSTRUCCIONES:
-      1. Elige UN SOLO perfume del estante que sea el absoluto ganador.
-      2. No inventes perfumes.
-      3. Tu justificación debe mencionar brevemente por qué encaja con la temperatura, humedad o UV (ej: "Con esta humedad, las notas de ${catalog[0]?.brand || 'madera'} proyectarán mejor sin saturar").
+      1. Elige UN perfume del estante que sea el absoluto GANADOR ("winner_id").
+      2. Si el usuario tiene más de un perfume en su estante, elige también un segundo perfume como ALTERNATIVA ("alternative_id") diferente al ganador, junto con una pequeña justificación. Si solo tiene 1 perfume, usa null para alternative_id y alternative_justification.
+      3. Asigna un porcentaje de confianza (0 a 100) a cada uno ("winner_percentage" y "alternative_percentage"), representando qué tan perfectos son para la ocasión. La suma de ambos DEBE ser 100.
+      ¡IMPORTANTE!: Calcula estos valores de manera OBJETIVA Y REAL basándote en la idoneidad del clima y perfil, NO uses valores por defecto (ej: puede ser 95 y 5, 51 y 49, 82 y 18, etc.). Si solo hay un perfume, el ganador es 100 y la alternativa null.
+      4. No inventes perfumes.
+      5. Tus justificaciones deben mencionar brevemente por qué encajan con la temperatura, humedad, UV o petición especial (máximo 3 líneas cada una).
       
       FORMATO DE RESPUESTA REQUERIDO (JSON puro):
       {
-        "winner_id": "ID del perfume",
-        "justification": "Tu explicación experta (Máximo 3 líneas)."
+        "winner_id": "ID del perfume principal",
+        "justification": "Tu explicación experta para el ganador principal (Máximo 3 líneas).",
+        "winner_percentage": <número entero calculado objetivamente>,
+        "alternative_id": "ID del perfume alternativo o null",
+        "alternative_justification": "Tu explicación para la opción alternativa (Máximo 2 líneas) o null",
+        "alternative_percentage": <número entero calculado objetivamente>
       }
     `;
 
@@ -203,12 +233,32 @@ export async function POST(request: Request) {
 
     const finalWinner = Array.isArray(winnerPerfume.perfumes) ? winnerPerfume.perfumes[0] : winnerPerfume.perfumes;
 
+    let finalAlternative = null;
+    if (aiDecision.alternative_id) {
+      const altItem = inventoryItems.find((item: any) => {
+        const p = Array.isArray(item.perfumes) ? item.perfumes[0] : item.perfumes;
+        return String(p.id) === String(aiDecision.alternative_id);
+      });
+      if (altItem) {
+        const p = Array.isArray(altItem.perfumes) ? altItem.perfumes[0] : altItem.perfumes;
+        finalAlternative = {
+          perfume: p,
+          justification: aiDecision.alternative_justification || 'Excelente segunda opción para el clima actual.',
+          percentage: aiDecision.alternative_percentage || 0
+        };
+      }
+    }
+
     // Guardar en caché para futuras consultas
     const { data: insertedLog, error: insertError } = await supabase.from('recommendation_logs').insert([{
       user_id: user.id,
       weather_context: weatherContext,
       recommended_perfume_id: finalWinner.id,
-      reasoning: aiDecision.justification
+      reasoning: aiDecision.justification,
+      winner_percentage: aiDecision.winner_percentage || 100,
+      alternative_perfume_id: finalAlternative ? finalAlternative.perfume.id : null,
+      alternative_reasoning: finalAlternative ? finalAlternative.justification : null,
+      alternative_percentage: finalAlternative ? finalAlternative.percentage : null
     }]).select('id').single();
 
     if (insertError) {
@@ -247,7 +297,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ 
       winner: finalWinner,
+      winner_percentage: aiDecision.winner_percentage || 100,
       justification: aiDecision.justification,
+      alternative: finalAlternative,
       context: weatherContext,
       source: 'ai',
       log_id: insertedLog?.id

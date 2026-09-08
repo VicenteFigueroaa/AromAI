@@ -97,14 +97,22 @@ export async function POST(request: Request) {
       "${message}"
       
       INSTRUCCIONES:
-      1. Elige UN SOLO perfume del estante que sea el MEJOR considerando el nuevo mensaje del usuario y el clima. Puede ser el mismo de antes o uno diferente.
-      2. No inventes perfumes, solo escoge del catálogo.
-      3. Tu justificación debe estar escrita en un tono amigable, respondiéndole directamente al usuario (como si estuvieran conversando) y explicando por qué este perfume encaja perfecto con lo que te acaba de contar. Máximo 4 líneas.
+      1. Elige UN perfume del estante que sea el MEJOR considerando el nuevo mensaje del usuario y el clima ("winner_id"). Puede ser el mismo de antes o uno diferente.
+      2. Si el usuario tiene más de un perfume, elige también un segundo perfume como ALTERNATIVA ("alternative_id") diferente al ganador, adaptado a este nuevo contexto, junto con una pequeña justificación. Si solo tiene 1 perfume, usa null para alternative_id y alternative_justification.
+      3. Asigna un porcentaje de confianza (0 a 100) a cada uno ("winner_percentage" y "alternative_percentage"). La suma de ambos DEBE ser 100.
+      ¡IMPORTANTE!: Calcula estos valores de manera OBJETIVA Y REAL evaluando qué tan bien encajan los perfumes con la petición del usuario, NO uses valores por defecto (ej: puede ser 90 y 10, 52 y 48, 77 y 23, etc.). Si solo hay un perfume, el ganador es 100 y la alternativa null.
+      4. No inventes perfumes, solo escoge del catálogo.
+      5. Tu justificación principal debe estar escrita en un tono amigable, respondiéndole directamente al usuario (como si estuvieran conversando) y explicando por qué este perfume encaja perfecto con lo que te acaba de contar. Máximo 4 líneas.
+      6. La justificación de la alternativa debe ser breve (máximo 2 líneas).
       
       FORMATO DE RESPUESTA REQUERIDO (JSON puro):
       {
-        "winner_id": "ID del perfume",
-        "justification": "Tu explicación experta en formato conversacional."
+        "winner_id": "ID del perfume ganador",
+        "justification": "Tu explicación experta en formato conversacional.",
+        "winner_percentage": <número entero calculado objetivamente>,
+        "alternative_id": "ID del perfume alternativo o null",
+        "alternative_justification": "Tu explicación para la alternativa (conversacional y breve) o null",
+        "alternative_percentage": <número entero calculado objetivamente>
       }
     `;
 
@@ -137,12 +145,32 @@ export async function POST(request: Request) {
       throw new Error("El perfume seleccionado por la IA no está en el inventario.");
     }
 
+    let finalAlternative = null;
+    if (aiDecision.alternative_id) {
+      const altItem = inventoryItems.find((item: any) => {
+        const p = Array.isArray(item.perfumes) ? item.perfumes[0] : item.perfumes;
+        return String(p.id) === String(aiDecision.alternative_id);
+      });
+      if (altItem) {
+        const p = Array.isArray(altItem.perfumes) ? altItem.perfumes[0] : altItem.perfumes;
+        finalAlternative = {
+          perfume: p,
+          justification: aiDecision.alternative_justification || 'Excelente segunda opción para esta ocasión.',
+          percentage: aiDecision.alternative_percentage || 0
+        };
+      }
+    }
+
     // Actualizar el log original en la base de datos para que la caché refleje la nueva decisión
     const { error: updateError } = await supabaseAdmin
       .from('recommendation_logs')
       .update({
         recommended_perfume_id: finalWinner.id,
-        reasoning: aiDecision.justification
+        reasoning: aiDecision.justification,
+        winner_percentage: aiDecision.winner_percentage || 100,
+        alternative_perfume_id: finalAlternative ? finalAlternative.perfume.id : null,
+        alternative_reasoning: finalAlternative ? finalAlternative.justification : null,
+        alternative_percentage: finalAlternative ? finalAlternative.percentage : null
       })
       .eq('id', log_id)
       .eq('user_id', user.id); // Seguridad
@@ -154,7 +182,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       winner: finalWinner,
-      justification: aiDecision.justification
+      winner_percentage: aiDecision.winner_percentage || 100,
+      justification: aiDecision.justification,
+      alternative: finalAlternative
     });
 
   } catch (error: any) {
