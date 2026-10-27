@@ -116,32 +116,46 @@ export default function RecomendacionPage() {
       let city: string | undefined = cityOverride;
 
       if (!cityOverride) {
-        // 1. Intentar obtener ubicación GPS (no bloquea si falla)
-        setStatusText('Consultando al satélite tu ubicación...');
+        // 1. Proceso de geolocalización escalonado
         try {
-          const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-            if (!navigator.geolocation) reject(new Error('no_support'));
+          if (!navigator.geolocation) {
+            throw new Error('no_support');
+          }
 
-            // Mostrar progreso mientras espera al GPS
-            const statusTimer = setTimeout(() => {
-              setStatusText('Buscando señal GPS... esto puede tardar unos segundos');
-            }, 3000);
+          setStatusText('Buscando señal GPS de alta precisión...');
+          let position: GeolocationPosition | null = null;
 
-            navigator.geolocation.getCurrentPosition(
-              (pos) => { clearTimeout(statusTimer); resolve(pos); },
-              (err) => { clearTimeout(statusTimer); reject(err); },
-              {
-                timeout: 10000,
+          // Intento 1: Alta precisión (GPS real del dispositivo)
+          try {
+            position = await new Promise<GeolocationPosition>((resolve, reject) => {
+              navigator.geolocation.getCurrentPosition(resolve, reject, {
                 enableHighAccuracy: true,
-                maximumAge: 120000 // Reusar ubicación de los últimos 2 minutos
-              }
-            );
-          });
-          latitude = position.coords.latitude;
-          longitude = position.coords.longitude;
-          setLocationPermitted(true);
+                timeout: 4500, // 4.5 segundos antes de pasar al plan B
+                maximumAge: 60000 // 1 minuto
+              });
+            });
+          } catch (highAccErr) {
+            console.warn('⚠️ Alta precisión falló o agotó tiempo. Probando precisión estándar (red/Wi-Fi)...');
+            setStatusText('Ajustando a ubicación por red/Wi-Fi...');
+            
+            // Intento 2: Precisión estándar (Triangulación Wi-Fi/red del navegador)
+            position = await new Promise<GeolocationPosition>((resolve, reject) => {
+              navigator.geolocation.getCurrentPosition(resolve, reject, {
+                enableHighAccuracy: false,
+                timeout: 4000,
+                maximumAge: 300000 // 5 minutos
+              });
+            });
+          }
+
+          if (position) {
+            latitude = position.coords.latitude;
+            longitude = position.coords.longitude;
+            setLocationPermitted(true);
+          }
         } catch (geoErr) {
-          console.warn('📍 GPS denegado o no disponible.');
+          // Intento 3: Si ambos fallaron (sin permisos en navegador/Windows o sin conexión), mostrar input manual
+          console.warn('📍 Ubicación denegada o no disponible.');
           setStatusText('');
           setNeedsManualLocation(true);
           setLoading(false);
@@ -190,6 +204,9 @@ export default function RecomendacionPage() {
 
     } catch (err: any) {
       setError(err.message);
+      if (err.message && err.message.includes('No pudimos obtener el clima')) {
+        setNeedsManualLocation(true);
+      }
     } finally {
       setLoading(false);
     }

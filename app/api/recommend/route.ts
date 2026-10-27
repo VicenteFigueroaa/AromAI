@@ -4,6 +4,31 @@ import { GoogleGenAI } from '@google/genai';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
+async function fetchWeatherWithRetry(url: string, maxRetries = 3): Promise<Response> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) return res;
+      
+      // Si es un error del cliente (4xx), no reintentamos
+      if (res.status >= 400 && res.status < 500) {
+        const errBody = await res.text();
+        throw new Error(`WeatherAPI error ${res.status}: ${errBody}`);
+      }
+
+      // Error de servidor (5xx) → reintentamos
+      console.warn(`⚠️ WeatherAPI intento ${attempt}/${maxRetries} falló con status ${res.status}`);
+    } catch (err: any) {
+      if (err.message.startsWith('WeatherAPI error 4')) throw err; // No reintentar 4xx
+      console.warn(`⚠️ WeatherAPI intento ${attempt}/${maxRetries} excepción:`, err.message);
+      if (attempt === maxRetries) throw err;
+    }
+    // Esperar antes de reintentar (backoff exponencial: 500ms, 1s, 2s)
+    await new Promise(r => setTimeout(r, 500 * Math.pow(2, attempt - 1)));
+  }
+  throw new Error('WeatherAPI: agotados todos los reintentos');
+}
+
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
@@ -20,28 +45,28 @@ export async function POST(request: Request) {
     let queryParam = "";
     if (latitude && longitude) {
       queryParam = `${latitude},${longitude}`;
-    } else if (city) {
-      queryParam = city;
+    } else if (city && typeof city === 'string' && city.trim().length > 0) {
+      queryParam = encodeURIComponent(city.trim());
     } else {
-      if (process.env.NODE_ENV === 'development') {
-        queryParam = "Santiago"; // Fallback salvavidas para desarrollo local
-      } else {
-        return NextResponse.json({ error: 'Coordenadas o ciudad no proporcionada' }, { status: 400 });
-      }
+      return NextResponse.json({ error: 'Coordenadas o ciudad no proporcionada' }, { status: 400 });
     }
 
-    // 3. Consultar WeatherAPI.com (Server-side para proteger la KEY)
+    // 3. Consultar WeatherAPI.com con reintentos automáticos
     const weatherKey = process.env.WEATHER_API_KEY;
     if (!weatherKey) {
       return NextResponse.json({ error: 'WEATHER_API_KEY no configurada en el servidor' }, { status: 500 });
     }
 
-    const weatherRes = await fetch(
-      `https://api.weatherapi.com/v1/forecast.json?key=${weatherKey}&q=${queryParam}&days=1&lang=es`
-    );
+    const weatherUrl = `https://api.weatherapi.com/v1/forecast.json?key=${weatherKey}&q=${queryParam}&days=1&lang=es`;
     
-    if (!weatherRes.ok) {
-      throw new Error('Error al consultar WeatherAPI');
+    let weatherRes: Response;
+    try {
+      weatherRes = await fetchWeatherWithRetry(weatherUrl);
+    } catch (weatherErr: any) {
+      console.error('❌ WeatherAPI falló tras reintentos:', weatherErr.message);
+      return NextResponse.json({ 
+        error: `No pudimos obtener el clima para "${city || 'las coordenadas indicadas'}". Verifica el nombre de la ciudad e intenta de nuevo.` 
+      }, { status: 502 });
     }
 
     const weatherData = await weatherRes.json();
@@ -214,13 +239,21 @@ export async function POST(request: Request) {
       }
     `;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.1-flash-lite',
-      contents: prompt,
-    });
-    const responseText = response.text ?? '';
-    const cleanJsonText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-    const aiDecision = JSON.parse(cleanJsonText);
+    let aiDecision: any;
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.1-flash-lite',
+        contents: prompt,
+      });
+      const responseText = response.text ?? '';
+      const cleanJsonText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+      aiDecision = JSON.parse(cleanJsonText);
+    } catch (aiErr: any) {
+      console.error('❌ Error en Gemini:', aiErr.message);
+      return NextResponse.json({ 
+        error: 'La IA no pudo procesar tu recomendación. Intenta de nuevo en unos segundos.' 
+      }, { status: 503 });
+    }
 
     const winnerPerfume = inventoryItems.find((item: any) => {
       const p = Array.isArray(item.perfumes) ? item.perfumes[0] : item.perfumes;
@@ -305,8 +338,8 @@ export async function POST(request: Request) {
       log_id: insertedLog?.id
     });
 
-  } catch (error) {
-    console.error('Error en recomendación:', error);
+  } catch (error: any) {
+    console.error('❌ Error en recomendación:', error?.message || error);
     return NextResponse.json({ error: 'Hubo un problema procesando la recomendación.' }, { status: 500 });
   }
 }
